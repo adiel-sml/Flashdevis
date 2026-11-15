@@ -1,7 +1,7 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { acompte, euros, prochainNumero, totalLigne, totaux } from '../lib/calcul';
+import { acompte, euros, totalLigne, totaux } from '../lib/calcul';
 import { pdfDocument } from '../lib/pdf';
-import { enregistrerDevis, getEtat, supprimerDevis, useEtat } from '../lib/store';
+import { enregistrerDevis, facturerDevis, supprimerDevis, useEtat } from '../lib/store';
 import type { Devis } from '../lib/types';
 import { STATUTS } from './TableauDeBord';
 
@@ -12,8 +12,9 @@ export default function DetailDevis() {
   const d = devis.find(x => x.id === id);
   if (!d) return <div className="carte">Ce devis n’existe pas. <Link to="/app" className="underline">Retour</Link></div>;
   const t = totaux(d.lignes, entreprise.regimeTva);
-  const maj = (patch: Partial<Devis>) => enregistrerDevis({ ...d, ...patch });
-  const lienSignature = `${location.origin}/s/${d.id}`;
+  const echec = () => alert('L’opération n’a pas pu être enregistrée. Vérifiez votre connexion et réessayez.');
+  const maj = (patch: Partial<Devis>) => enregistrerDevis({ ...d, ...patch }).catch(echec);
+  const lienSignature = `${location.origin}/s/${d.jeton ?? d.id}`;
 
   const telecharger = (mode: 'devis' | 'facture') => pdfDocument(d, entreprise, mode).save(`${mode === 'facture' ? d.facture!.numero : d.numero}.pdf`);
   async function envoyer() {
@@ -22,10 +23,7 @@ export default function DetailDevis() {
     else location.href = `mailto:${d!.client.email}?subject=${encodeURIComponent(`Devis ${d!.numero} · ${entreprise.nom}`)}&body=${encodeURIComponent(texte)}`;
     if (d!.statut === 'brouillon') maj({ statut: 'envoye' });
   }
-  function facturer() {
-    const numeros = getEtat().devis.flatMap(x => (x.facture ? [x.facture.numero] : []));
-    maj({ statut: 'facture', facture: { numero: prochainNumero('F', new Date().getFullYear(), numeros), date: new Date().toISOString(), payee: false } });
-  }
+  const facturer = () => facturerDevis(d).catch(echec);
   function relancer() {
     const texte = `Bonjour ${d!.client.nom},\n\nSauf erreur de ma part, la facture ${d!.facture!.numero} de ${euros(t.ttc)} reste à régler. Pourriez-vous procéder au paiement dès que possible ?\n\nMerci d’avance,\n${entreprise.nom}`;
     location.href = `mailto:${d!.client.email}?subject=${encodeURIComponent(`Rappel : facture ${d!.facture!.numero}`)}&body=${encodeURIComponent(texte)}`;
@@ -69,7 +67,7 @@ export default function DetailDevis() {
         </div>
       </section>
       {d.signature && <p className="text-sm text-green-700">Signé par {d.signature.nom} le {new Date(d.signature.date).toLocaleDateString('fr-FR')}.</p>}
-      {!d.facture && <button onClick={() => { if (confirm('Supprimer ce devis ?')) { supprimerDevis(d.id); nav('/app'); } }} className="text-sm text-red-600 underline">Supprimer le devis</button>}
+      {!d.facture && <button onClick={() => { if (confirm('Supprimer ce devis ?')) supprimerDevis(d.id).then(() => nav('/app'), echec); }} className="text-sm text-red-600 underline">Supprimer le devis</button>}
     </div>
   );
 }

@@ -54,6 +54,7 @@ export interface Devis {
   statut: StatutDevis;
   signature?: { nom: string; date: string; image: string };
   facture?: { numero: string; date: string; payee: boolean };
+  jeton?: string; // lien secret de signature (attribué par la base)
 }
 
 export const entrepriseVide: Entreprise = {

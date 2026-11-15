@@ -1,5 +1,7 @@
-import { Link, NavLink, Outlet } from 'react-router-dom';
-import { useEtat } from '../lib/store';
+import { useEffect, useState } from 'react';
+import { Link, Navigate, NavLink, Outlet } from 'react-router-dom';
+import { charger, useEtat, vider } from '../lib/store';
+import { supabase } from '../lib/supabase';
 
 export const Logo = ({ clair = false }: { clair?: boolean }) => (
   <span className={`inline-flex items-center gap-2 text-lg font-extrabold tracking-tight ${clair ? 'text-white' : 'text-encre-900'}`}>
@@ -11,7 +13,25 @@ export const Logo = ({ clair = false }: { clair?: boolean }) => (
 const lien = ({ isActive }: { isActive: boolean }) => `rounded-lg px-3 py-2 text-sm font-semibold ${isActive ? 'bg-flash-100 text-encre-900' : 'text-slate-600 hover:text-encre-900'}`;
 
 export default function Cadre() {
-  const { entreprise } = useEtat();
+  const { entreprise, pret } = useEtat();
+  // Avec Supabase, l'appli demande une session ; en mode démo, accès direct
+  const [session, setSession] = useState<'attente' | 'absente' | 'ok'>(supabase ? 'attente' : 'ok');
+  const [erreur, setErreur] = useState('');
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => setSession(data.session ? 'ok' : 'absente'));
+    const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s ? 'ok' : 'absente'));
+    return () => data.subscription.unsubscribe();
+  }, []);
+  useEffect(() => {
+    if (!supabase) return;
+    if (session === 'ok') charger().catch(() => setErreur('Impossible de charger vos données. Vérifiez votre connexion et rechargez la page.'));
+    if (session === 'absente') vider();
+  }, [session]);
+
+  if (session === 'absente') return <Navigate to="/connexion" replace />;
+  if (erreur) return <p role="alert" className="mx-auto mt-10 max-w-md carte text-red-700">{erreur}</p>;
+  if (session === 'attente' || !pret) return <p className="mt-20 text-center text-slate-500">Chargement…</p>;
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -21,6 +41,7 @@ export default function Cadre() {
             <NavLink to="/app" end className={lien}>Devis</NavLink>
             <NavLink to="/app/parametres" className={lien}>Paramètres</NavLink>
             <Link to="/app/nouveau" className="btn-primaire ml-1 hidden sm:inline-flex">+ Nouveau devis</Link>
+            {supabase && <button onClick={() => supabase!.auth.signOut()} className="ml-1 text-sm text-slate-500 underline">Déconnexion</button>}
           </nav>
         </div>
       </header>

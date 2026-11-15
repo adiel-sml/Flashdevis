@@ -2,6 +2,7 @@
 // La clé ANTHROPIC_API_KEY reste côté serveur, dans les variables d'environnement de Vercel.
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 
 const MODELE = process.env.FLASHDEVIS_MODEL || 'claude-haiku-5-5'; // choisi par l'utilisateur pour économiser son crédit
@@ -55,8 +56,16 @@ interface Res { status(code: number): Res; json(body: unknown): void; setHeader(
 export default async function handler(req: Req, res: Res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ erreur: 'Méthode non autorisée' });
-  const ip = String(req.headers['x-forwarded-for'] ?? req.socket?.remoteAddress ?? 'inconnu').split(',')[0].trim();
-  if (tropDeRequetes(ip)) return res.status(429).json({ erreur: 'Trop de devis générés en une heure. Réessayez un peu plus tard.' });
+  // Avec Supabase configuré, seule une session valide peut générer (protège le crédit) ; la limite s'applique par compte
+  let cle = String(req.headers['x-forwarded-for'] ?? req.socket?.remoteAddress ?? 'inconnu').split(',')[0].trim();
+  const url = process.env.VITE_SUPABASE_URL, anon = process.env.VITE_SUPABASE_ANON_KEY;
+  if (url && anon) {
+    const jeton = String(req.headers.authorization ?? '').replace(/^Bearer /, '');
+    const { data } = jeton ? await createClient(url, anon, { auth: { persistSession: false } }).auth.getUser(jeton) : { data: { user: null } };
+    if (!data.user) return res.status(401).json({ erreur: 'Connectez-vous pour générer un devis.' });
+    cle = data.user.id;
+  }
+  if (tropDeRequetes(cle)) return res.status(429).json({ erreur: 'Trop de devis générés en une heure. Réessayez un peu plus tard.' });
   const entree = Entree.safeParse(typeof req.body === 'string' ? JSON.parse(req.body) : req.body);
   if (!entree.success) return res.status(400).json({ erreur: 'Décrivez le chantier en quelques phrases (2 000 caractères au plus).' });
   if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ erreur: 'Service de génération non configuré.' });

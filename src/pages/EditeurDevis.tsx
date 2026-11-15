@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { euros, prochainNumero, totalLigne, totaux } from '../lib/calcul';
+import { Link } from 'react-router-dom';
+import { euros, totalLigne, totaux } from '../lib/calcul';
 import { useDictee } from '../lib/dictee';
-import { apprendreTarifs, enregistrerDevis, getEtat, id, useEtat } from '../lib/store';
+import { apprendreTarifs, enregistrerDevis, ErreurQuota, getEtat, id, useEtat } from '../lib/store';
+import { jetonAcces } from '../lib/supabase';
 import type { Client, Devis, Ligne } from '../lib/types';
 
 const ligneVide = (tva: number): Ligne => ({ id: id(), designation: '', quantite: 1, unite: 'u', prixUnitaireHt: 0, tauxTva: tva, estimation: false });
@@ -24,14 +26,18 @@ export default function EditeurDevis() {
   const [conseils, setConseils] = useState<string[]>([]);
   const [chargement, setChargement] = useState(false);
   const [erreur, setErreur] = useState('');
+  const [quota, setQuota] = useState(false);
+  const [envoi, setEnvoi] = useState(false);
+  const [erreurSauvegarde, setErreurSauvegarde] = useState('');
   const dictee = useDictee(t => setDescription(d => (d ? `${d} ${t}` : t)));
   const t = useMemo(() => totaux(lignes, entreprise.regimeTva), [lignes, entreprise.regimeTva]);
 
   async function generer() {
     setChargement(true); setErreur(''); dictee.arreter();
     try {
+      const jeton = await jetonAcces();
       const r = await fetch('/api/generer-devis', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}) },
         body: JSON.stringify({ texte: description, metier: entreprise.metier, regimeTva: entreprise.regimeTva, tarifs: tarifs.slice(-80).map(({ designation, unite, prixHt }) => ({ designation, unite, prixHt })) }),
       });
       const data = await r.json().catch(() => ({}));
@@ -45,17 +51,21 @@ export default function EditeurDevis() {
 
   const maj = (i: number, patch: Partial<Ligne>) => setLignes(ls => ls.map((l, j) => (j === i ? { ...l, ...patch, estimation: 'prixUnitaireHt' in patch ? false : l.estimation } : l)));
 
-  function enregistrer() {
-    const tous = getEtat().devis;
+  async function enregistrer() {
     const d: Devis = {
-      id: existant?.id ?? id(),
-      numero: existant?.numero ?? prochainNumero('D', new Date().getFullYear(), tous.map(x => x.numero)),
+      id: existant?.id ?? id(), numero: existant?.numero ?? '', jeton: existant?.jeton,
       titre: titre || 'Devis', client, lignes: lignes.filter(l => l.designation.trim()), remarques,
       dateCreation: existant?.dateCreation ?? new Date().toISOString(), statut: existant?.statut ?? 'brouillon', signature: existant?.signature, facture: existant?.facture,
     };
-    enregistrerDevis(d);
-    apprendreTarifs(d.lignes.filter(l => !l.estimation));
-    nav(`/app/devis/${d.id}`);
+    setEnvoi(true); setErreurSauvegarde(''); setQuota(false);
+    try {
+      const final = await enregistrerDevis(d);
+      apprendreTarifs(d.lignes.filter(l => !l.estimation)).catch(() => { /* non bloquant */ });
+      nav(`/app/devis/${final.id}`);
+    } catch (e) {
+      if (e instanceof ErreurQuota) setQuota(true);
+      else setErreurSauvegarde('Enregistrement impossible. Vérifiez votre connexion et réessayez.');
+    } finally { setEnvoi(false); }
   }
 
   return (
@@ -124,7 +134,9 @@ export default function EditeurDevis() {
 
       <section className="carte sticky bottom-3 flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-slate-600">Total HT <b className="text-encre-900">{euros(t.ht)}</b>{entreprise.regimeTva === 'normal' && <> · TTC <b className="text-encre-900">{euros(t.ttc)}</b></>}</div>
-        <button type="button" onClick={enregistrer} disabled={!lignes.some(l => l.designation.trim())} className="btn-primaire">Enregistrer le devis</button>
+        <button type="button" onClick={enregistrer} disabled={envoi || !lignes.some(l => l.designation.trim())} className="btn-primaire">{envoi ? 'Enregistrement…' : 'Enregistrer le devis'}</button>
+        {quota && <p role="alert" className="w-full rounded-lg bg-flash-50 px-3 py-2 text-sm text-encre-800">{new ErreurQuota().message} <Link to="/#tarifs" className="font-semibold underline">Voir l’offre Pro</Link></p>}
+        {erreurSauvegarde && <p role="alert" className="w-full text-sm text-red-700">{erreurSauvegarde}</p>}
       </section>
     </div>
   );

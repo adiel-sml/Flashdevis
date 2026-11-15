@@ -9,13 +9,15 @@ import EditeurDevis from './pages/EditeurDevis';
 import DetailDevis from './pages/DetailDevis';
 import Parametres from './pages/Parametres';
 import Signature from './pages/Signature';
+import Connexion from './pages/Connexion';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Accueil />} />
-        <Route path="/s/:id" element={<Signature />} />
+        <Route path="/s/:jeton" element={<Signature />} />
+        <Route path="/connexion" element={<Connexion />} />
         <Route path="/app" element={<Cadre />}>
           <Route index element={<TableauDeBord />} />
           <Route path="nouveau" element={<EditeurDevis />} />

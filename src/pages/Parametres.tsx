@@ -7,10 +7,15 @@ export default function Parametres() {
   const [e, setE] = useState<Entreprise>(etat.entreprise);
   const [tarifs, setTarifs] = useState<Tarif[]>(etat.tarifs);
   const [ok, setOk] = useState(false);
+  const [erreur, setErreur] = useState('');
   const champ = (k: keyof Entreprise, lib: string, props: Record<string, unknown> = {}) => (
     <label><span className="etiquette">{lib}</span><input className="champ" value={String(e[k])} onChange={ev => setE({ ...e, [k]: typeof e[k] === 'number' ? Number(ev.target.value) || 0 : ev.target.value })} {...props} /></label>
   );
-  function enregistrer() { enregistrerEntreprise(e); enregistrerTarifs(tarifs.filter(t => t.designation.trim())); setOk(true); setTimeout(() => setOk(false), 2500); }
+  async function enregistrer() {
+    setErreur('');
+    try { await enregistrerEntreprise(e); await enregistrerTarifs(tarifs.filter(t => t.designation.trim())); setOk(true); setTimeout(() => setOk(false), 2500); }
+    catch { setErreur('Enregistrement impossible. Vérifiez les champs (deux tarifs ne peuvent pas avoir le même nom) et votre connexion.'); }
+  }
 
   return (
     <div className="space-y-5">
@@ -52,7 +57,7 @@ export default function Parametres() {
         ))}
         <button className="btn-secondaire" onClick={() => setTarifs(ts => [...ts, { id: id(), designation: '', unite: 'u', prixHt: 0 }])}>+ Ajouter un tarif</button>
       </section>
-      <div className="flex items-center gap-3"><button onClick={enregistrer} className="btn-primaire">Enregistrer</button>{ok && <span className="text-sm font-medium text-green-700">Enregistré.</span>}</div>
+      <div className="flex items-center gap-3"><button onClick={enregistrer} className="btn-primaire">Enregistrer</button>{ok && <span className="text-sm font-medium text-green-700">Enregistré.</span>}{erreur && <span role="alert" className="text-sm text-red-700">{erreur}</span>}</div>
     </div>
   );
 }
