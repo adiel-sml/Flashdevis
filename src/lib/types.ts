@@ -55,6 +55,10 @@ export interface Devis {
   signature?: { nom: string; date: string; image: string };
   facture?: { numero: string; date: string; payee: boolean };
   jeton?: string; // lien secret de signature (attribué par la base)
+  envoyeLe?: string; // date du premier envoi au client
+  payeeLe?: string; // date de paiement de la facture
+  ouvertures?: number; // nombre d'ouvertures du lien par le client
+  ouvertLe?: string; // dernière ouverture du lien
 }
 
 export const entrepriseVide: Entreprise = {

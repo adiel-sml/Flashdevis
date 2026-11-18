@@ -67,8 +67,9 @@ En local, la génération demande la fonction serveur : lancez `vercel dev` avec
 
 1. Créer un projet sur supabase.com (région Europe, par exemple Paris ou Francfort).
 2. **SQL Editor**, coller le contenu de `supabase/migrations/0001_schema.sql`, puis **Run**.
+   Puis, de la même façon, `supabase/migrations/0002_suivi.sql` (dates d'envoi et de paiement, ouvertures du lien de signature, utilisées par le tableau de bord).
 3. **Authentication**, puis **URL Configuration** : mettre l'adresse du site Vercel dans **Site URL** et ajouter `https://<votre-site>/app` dans **Redirect URLs**.
 4. **Project Settings**, puis **API** : copier **Project URL** et la clé **anon public**.
 5. Dans Vercel, ajouter `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY`, puis redéployer. La clé anon est publique par conception : la sécurité repose sur les règles de la base. Ne jamais mettre la clé `service_role` dans l'appli.
 
-Tester les règles en local : `psql -f supabase/tests/00_simulation_supabase.sql -f supabase/migrations/0001_schema.sql -f supabase/tests/01_regles.sql` sur une base PostgreSQL 16 vide.
+Tester les règles en local, sur une base PostgreSQL 16 vide : `psql -f supabase/tests/00_simulation_supabase.sql -f supabase/migrations/0001_schema.sql -f supabase/tests/01_regles.sql`, puis dans une nouvelle session `psql -f supabase/migrations/0002_suivi.sql` et `psql -f supabase/tests/02_suivi.sql`.

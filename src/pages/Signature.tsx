@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Logo } from '../components/Cadre';
 import { euros, totalLigne, totaux } from '../lib/calcul';
-import { enregistrerDevis, getEtat } from '../lib/store';
+import { enregistrerDevis, getEtat, noterOuverture } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import type { Ligne, RegimeTva } from '../lib/types';
 
@@ -27,6 +27,7 @@ export default function Signature() {
 
   useEffect(() => {
     if (!supabase) return;
+    noterOuverture(jeton);
     supabase.rpc('devis_public', { p_jeton: jeton }).then(({ data, error }) => {
       if (error || !data) return setVue(null);
       setVue({ numero: data.numero, titre: data.titre, lignes: data.lignes, entreprise: data.entreprise?.nom ?? '', regime: data.entreprise?.regime_tva ?? 'normal', signature: data.signature ?? undefined });

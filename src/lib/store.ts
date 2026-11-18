@@ -46,6 +46,7 @@ const versDevis = (r: Ligne): Devis => ({
   id: r.id as string, numero: r.numero as string, titre: r.titre as string, client: r.client as Devis['client'], lignes: r.lignes as Devis['lignes'],
   remarques: r.remarques as string, dateCreation: r.cree_le as string, statut: r.statut as Devis['statut'], jeton: r.jeton_signature as string,
   signature: (r.signature as Devis['signature']) ?? undefined, facture: (r.facture as Devis['facture']) ?? undefined,
+  envoyeLe: (r.envoye_le as string) ?? undefined, payeeLe: (r.payee_le as string) ?? undefined, ouvertures: Number(r.ouvertures ?? 0), ouvertLe: (r.ouvert_le as string) ?? undefined,
 });
 const versTarif = (r: Ligne): Tarif => ({ id: r.id as string, designation: r.designation as string, unite: r.unite as string, prixHt: Number(r.prix_ht) });
 const verifier = <T,>({ data, error }: { data: T; error: { message: string } | null }) => {
@@ -89,8 +90,11 @@ export async function enregistrerDevis(d: Devis): Promise<Devis> {
     const champs = { titre: d.titre, client: d.client, lignes: d.lignes, remarques: d.remarques, statut: d.statut, ...(d.facture ? { facture: d.facture } : {}) };
     const r = existe ? await supabase.from('devis').update(champs).eq('id', d.id).select().single() : await supabase.from('devis').insert({ id: d.id, ...champs }).select().single();
     final = versDevis(verifier(r) as Ligne);
-  } else if (!existe) {
-    final = { ...d, numero: prochainNumero('D', new Date().getFullYear(), etat.devis.map(x => x.numero)), jeton: d.id };
+  } else {
+    // mode démo : les dates de suivi sont posées ici (avec Supabase, c'est la base qui s'en charge)
+    const avant = etat.devis.find(x => x.id === d.id), maintenant = new Date().toISOString();
+    final = { ...d, envoyeLe: avant?.envoyeLe ?? (d.statut === 'envoye' ? maintenant : undefined), payeeLe: d.facture?.payee ? (avant?.payeeLe ?? maintenant) : undefined };
+    if (!existe) final = { ...final, numero: prochainNumero('D', new Date().getFullYear(), etat.devis.map(x => x.numero)), jeton: d.id };
   }
   publier({ ...etat, devis: existe ? etat.devis.map(x => (x.id === final.id ? final : x)) : [final, ...etat.devis] });
   return final;
@@ -102,6 +106,11 @@ export async function facturerDevis(d: Devis): Promise<Devis> {
   else final = { ...d, statut: 'facture', facture: { numero: prochainNumero('F', new Date().getFullYear(), etat.devis.flatMap(x => (x.facture ? [x.facture.numero] : []))), date: new Date().toISOString(), payee: false } };
   publier({ ...etat, devis: etat.devis.map(x => (x.id === final.id ? final : x)) });
   return final;
+}
+
+// Le client ouvre son lien de signature (compté par la base ; sans le script 0002, l'appel échoue sans gêner)
+export async function noterOuverture(jeton: string) {
+  if (supabase) await supabase.rpc('noter_ouverture', { p_jeton: jeton }).then(() => undefined, () => undefined);
 }
 
 export async function supprimerDevis(idDevis: string) {

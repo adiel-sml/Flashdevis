@@ -1,73 +1,134 @@
+// Fiche d'un devis : où il en est (frise), ce qu'il faut savoir (encart), et un seul grand bouton pour l'étape suivante.
+import { useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Feuille } from '../components/Elements';
+import { IcCoche, IcCorbeille, IcCrayon, IcEuro, IcHorloge, IcLien, IcPdf, IcRetour, IcSuite } from '../components/Icones';
 import { acompte, euros, totalLigne, totaux } from '../lib/calcul';
+import { envoyerDevis, lienSignature, relancerDevis, relancerFacture } from '../lib/messages';
 import { pdfDocument } from '../lib/pdf';
 import { enregistrerDevis, facturerDevis, supprimerDevis, useEtat } from '../lib/store';
+import { dateEnvoi, etape, jours, RELANCE_DEVIS_J, RELANCE_FACTURE_J } from '../lib/suivi';
 import type { Devis } from '../lib/types';
-import { STATUTS } from './TableauDeBord';
+
+const ETAPES = ['Rédigé', 'Envoyé', 'Signé', 'Facturé', 'Payé'] as const;
+const RANG = { brouillon: 0, envoye: 1, refuse: 1, signe: 2, facture: 3, payee: 4 } as const;
+const date = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : '');
+const prenom = (d: Devis) => d.client.nom || 'le client';
+
+function Frise({ d }: { d: Devis }) {
+  const e = etape(d), r = RANG[e], fini = e === 'payee';
+  return (
+    <div className="mt-5" aria-label={`Étape : ${ETAPES[r]}`}>
+      <div className="flex items-center">
+        {ETAPES.map((_, i) => <span key={i} className="contents">
+          {i > 0 && <span className={`h-0.5 flex-1 ${i <= r ? 'bg-encre-900' : 'bg-trait'}`} />}
+          <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-extrabold ${i < r || (fini && i === r) ? 'bg-encre-900 text-white' : i === r ? (e === 'refuse' ? 'bg-alerte text-white' : 'bg-flash-500 text-encre-900 shadow-[0_0_0_4px_#fff3d1]') : 'border-2 border-trait bg-white'}`}>
+            {i < r || (fini && i === r) ? <IcCoche className="h-3.5 w-3.5" /> : i === r ? (e === 'refuse' ? '×' : i + 1) : ''}
+          </span>
+        </span>)}
+      </div>
+      <div className="-mx-2.5 mt-1.5 grid grid-cols-5 text-center text-[11px] font-semibold text-gris">{ETAPES.map((l, i) => <span key={l} className={i <= r ? 'text-encre-900' : ''}>{i === 1 && e === 'refuse' ? 'Refusé' : l}</span>)}</div>
+    </div>
+  );
+}
+
+function Encart({ d }: { d: Devis }) {
+  const e = etape(d);
+  let ton = 'bg-creme', titre = '', texte: ReactNode = '';
+  if (e === 'brouillon') { titre = 'Pas encore envoyé'; texte = `Envoyez-le à ${prenom(d)} : il pourra le signer sur son téléphone, sans compte.`; }
+  if (e === 'envoye') {
+    const j = jours(dateEnvoi(d));
+    ton = j >= RELANCE_DEVIS_J ? 'bg-flash-100' : 'bg-info-pale';
+    titre = j === 0 ? 'Envoyé aujourd’hui' : j >= RELANCE_DEVIS_J ? `Pas de réponse depuis ${j} jours` : `Envoyé il y a ${j} jour${j > 1 ? 's' : ''}`;
+    texte = d.ouvertures ? `Le lien a été ouvert ${d.ouvertures} fois, la dernière le ${date(d.ouvertLe)}.` : 'Le client n’a pas encore ouvert le lien.';
+  }
+  if (e === 'signe') { ton = 'bg-ok-pale'; titre = d.signature ? `Signé par ${d.signature.nom} le ${date(d.signature.date)}` : 'Marqué comme signé'; texte = 'Vous pouvez faire les travaux, puis le transformer en facture en un geste.'; }
+  if (e === 'facture') { const j = jours(d.facture!.date); ton = j >= RELANCE_FACTURE_J ? 'bg-alerte-pale' : 'bg-flash-100'; titre = `Facture ${d.facture!.numero} · ${j >= RELANCE_FACTURE_J ? `impayée depuis ${j} jours` : `émise le ${date(d.facture!.date)}`}`; texte = 'Marquez-la payée dès réception du virement.'; }
+  if (e === 'payee') { ton = 'bg-ok-pale'; titre = `Payée${d.payeeLe ? ` le ${date(d.payeeLe)}` : ''}`; texte = `Facture ${d.facture!.numero} réglée. Chantier bouclé.`; }
+  if (e === 'refuse') { titre = 'Refusé par le client'; texte = 'Vous pouvez l’ajuster et le renvoyer.'; }
+  return <div className={`mt-4 flex gap-2.5 rounded-[14px] px-3.5 py-3 text-[13px] ${ton}`}><IcHorloge className="mt-0.5 h-5 w-5 shrink-0 text-encre-600" /><div><b className="block text-sm">{titre}</b>{texte}</div></div>;
+}
 
 export default function DetailDevis() {
   const { id } = useParams();
   const { devis, entreprise } = useEtat();
   const nav = useNavigate();
+  const [menu, setMenu] = useState(false);
+  const [occupe, setOccupe] = useState(false);
+  const [info, setInfo] = useState('');
   const d = devis.find(x => x.id === id);
-  if (!d) return <div className="carte">Ce devis n’existe pas. <Link to="/app" className="underline">Retour</Link></div>;
+  if (!d) return <div className="mt-10 text-center text-gris">Ce devis n’existe pas. <Link to="/app/devis" className="underline">Retour</Link></div>;
   const t = totaux(d.lignes, entreprise.regimeTva);
-  const echec = () => alert('L’opération n’a pas pu être enregistrée. Vérifiez votre connexion et réessayez.');
-  const maj = (patch: Partial<Devis>) => enregistrerDevis({ ...d, ...patch }).catch(echec);
-  const lienSignature = `${location.origin}/s/${d.jeton ?? d.id}`;
+  const e = etape(d);
 
-  const telecharger = (mode: 'devis' | 'facture') => pdfDocument(d, entreprise, mode).save(`${mode === 'facture' ? d.facture!.numero : d.numero}.pdf`);
-  async function envoyer() {
-    const texte = `Bonjour ${d!.client.nom},\n\nVoici votre devis ${d!.numero} « ${d!.titre} » d’un montant de ${euros(t.ttc)}.\nVous pouvez le consulter et le signer en ligne : ${lienSignature}\n\nCordialement,\n${entreprise.nom}`;
-    if (navigator.share) { try { await navigator.share({ title: `Devis ${d!.numero}`, text: texte }); } catch { return; } }
-    else location.href = `mailto:${d!.client.email}?subject=${encodeURIComponent(`Devis ${d!.numero} · ${entreprise.nom}`)}&body=${encodeURIComponent(texte)}`;
-    if (d!.statut === 'brouillon') maj({ statut: 'envoye' });
-  }
-  const facturer = () => facturerDevis(d).catch(echec);
-  function relancer() {
-    const texte = `Bonjour ${d!.client.nom},\n\nSauf erreur de ma part, la facture ${d!.facture!.numero} de ${euros(t.ttc)} reste à régler. Pourriez-vous procéder au paiement dès que possible ?\n\nMerci d’avance,\n${entreprise.nom}`;
-    location.href = `mailto:${d!.client.email}?subject=${encodeURIComponent(`Rappel : facture ${d!.facture!.numero}`)}&body=${encodeURIComponent(texte)}`;
-  }
+  const faire = (f: () => Promise<unknown>) => async () => {
+    setMenu(false); setOccupe(true); setInfo('');
+    try { await f(); } catch { setInfo('L’opération n’a pas pu être enregistrée. Vérifiez votre connexion.'); } finally { setOccupe(false); }
+  };
+  const maj = (patch: Partial<Devis>) => enregistrerDevis({ ...d, ...patch });
+  const pdf = (mode: 'devis' | 'facture') => faire(async () => pdfDocument(d, entreprise, mode).save(`${mode === 'facture' ? d.facture!.numero : d.numero}.pdf`));
+  const envoyer = faire(async () => { if (await envoyerDevis(d, entreprise)) if (d.statut === 'brouillon' || d.statut === 'refuse') await maj({ statut: 'envoye' }); });
+  const copier = faire(async () => { await navigator.clipboard.writeText(lienSignature(d)); setInfo('Lien de signature copié.'); });
+
+  // La prochaine étape, en grand
+  const impayeLongtemps = e === 'facture' && jours(d.facture!.date) >= RELANCE_FACTURE_J;
+  const principal: [string, () => void] =
+    e === 'brouillon' ? [`Envoyer à ${prenom(d)}`, envoyer]
+    : e === 'envoye' ? [`Relancer ${prenom(d)}`, faire(() => relancerDevis(d, entreprise))]
+    : e === 'signe' ? ['Transformer en facture', faire(() => facturerDevis(d))]
+    : impayeLongtemps ? [`Relancer ${prenom(d)}`, faire(() => relancerFacture(d, entreprise))]
+    : e === 'facture' ? ['Marquer comme payée', faire(() => maj({ facture: { ...d.facture!, payee: true } }))]
+    : e === 'payee' ? ['PDF de la facture', pdf('facture')]
+    : ['Modifier le devis', () => nav(`/app/devis/${d.id}/modifier`)];
+
+  const secondaires: [typeof IcPdf, string, () => void, boolean?][] = [
+    [IcPdf, 'PDF du devis', pdf('devis')],
+    ...(d.facture && e !== 'payee' ? [[IcPdf, 'PDF de la facture', pdf('facture')] as [typeof IcPdf, string, () => void]] : []),
+    ...(!d.facture && e !== 'brouillon' ? [[IcLien, 'Copier le lien de signature', copier] as [typeof IcPdf, string, () => void]] : []),
+    ...(e === 'envoye' ? [[IcCoche, 'Marquer comme signé', faire(() => maj({ statut: 'signe' }))] as [typeof IcPdf, string, () => void], [IcCorbeille, 'Marquer comme refusé', faire(() => maj({ statut: 'refuse' }))] as [typeof IcPdf, string, () => void]] : []),
+    ...(e === 'envoye' || e === 'refuse' ? [[IcLien, 'Renvoyer le devis', envoyer] as [typeof IcPdf, string, () => void]] : []),
+    ...(impayeLongtemps ? [[IcEuro, 'Marquer comme payée', faire(() => maj({ facture: { ...d.facture!, payee: true } }))] as [typeof IcPdf, string, () => void]] : []),
+    ...(!d.facture && e !== 'refuse' ? [[IcCrayon, 'Modifier', () => nav(`/app/devis/${d.id}/modifier`)] as [typeof IcPdf, string, () => void]] : []),
+    ...(!d.facture ? [[IcCorbeille, 'Supprimer le devis', () => { if (confirm('Supprimer ce devis ?')) faire(async () => { await supprimerDevis(d.id); nav('/app/devis', { replace: true }); })(); }, true] as [typeof IcPdf, string, () => void, boolean]] : []),
+  ];
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm text-slate-500">{d.numero}{d.facture && ` · Facture ${d.facture.numero}`}</p>
-          <h1 className="text-2xl font-extrabold">{d.titre}</h1>
-          <p className="text-slate-600">{d.client.nom || 'Client sans nom'}{d.client.adresse && ` · ${d.client.adresse}`}</p>
-        </div>
-        <span className={`rounded-full px-3 py-1 text-sm font-semibold ${STATUTS[d.statut].style}`}>{d.facture?.payee ? 'Payé' : STATUTS[d.statut].libelle}</span>
-      </div>
+    <div>
+      <button onClick={() => (history.length > 1 ? nav(-1) : nav('/app/devis'))} className="mb-3.5 mt-1 inline-flex items-center gap-1.5 text-sm font-semibold text-gris"><IcRetour className="h-5 w-5" />Retour</button>
+      <p className="text-[13px] font-semibold text-gris">{d.numero}{d.facture && ` · ${d.facture.numero}`} · créé le {date(d.dateCreation)}</p>
+      <h1 className="mb-1 mt-0.5 text-2xl font-extrabold leading-tight tracking-tight">{d.titre}</h1>
+      <p className="text-sm text-encre-600">{d.client.nom || 'Client sans nom'}{d.client.adresse && ` · ${d.client.adresse}`}</p>
+      <Frise d={d} />
+      <Encart d={d} />
 
-      <div className="flex flex-wrap gap-2">
-        {!d.facture && <button onClick={envoyer} className="btn-primaire">Envoyer au client</button>}
-        <button onClick={() => telecharger('devis')} className="btn-secondaire">PDF du devis</button>
-        {!d.facture && <Link to={`/app/devis/${d.id}/modifier`} className="btn-secondaire">Modifier</Link>}
-        {(d.statut === 'envoye' || d.statut === 'brouillon') && <button onClick={() => maj({ statut: 'signe' })} className="btn-secondaire">Marquer comme signé</button>}
-        {d.statut === 'signe' && <button onClick={facturer} className="btn-primaire">Transformer en facture</button>}
-        {d.facture && <button onClick={() => telecharger('facture')} className="btn-primaire">PDF de la facture</button>}
-        {d.facture && !d.facture.payee && <button onClick={relancer} className="btn-secondaire">Relancer le client</button>}
-        {d.facture && !d.facture.payee && <button onClick={() => maj({ facture: { ...d.facture!, payee: true } })} className="btn-secondaire">Marquer comme payée</button>}
-      </div>
-      {d.statut === 'envoye' && <p className="text-sm text-slate-500">Lien de signature à transmettre : <span className="break-all font-mono">{lienSignature}</span></p>}
-
-      <section className="carte overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead><tr className="border-b text-left text-slate-500"><th className="py-2">Désignation</th><th className="text-right">Qté</th><th className="text-right">PU HT</th><th className="text-right">Total HT</th></tr></thead>
-          <tbody>{d.lignes.map(l => (
-            <tr key={l.id} className="border-b border-slate-100"><td className="py-2 pr-2">{l.designation}</td><td className="text-right">{l.quantite} {l.unite}</td><td className="text-right">{euros(l.prixUnitaireHt)}</td><td className="text-right font-medium">{euros(totalLigne(l))}</td></tr>
-          ))}</tbody>
-        </table>
-        <div className="ml-auto mt-4 w-full max-w-xs space-y-1 text-sm">
+      <section className="mt-3.5 rounded-[18px] border border-trait bg-white px-3.5 py-1">
+        {d.lignes.map(l => (
+          <div key={l.id} className="flex justify-between gap-3 border-b border-[#f0ece4] py-2.5 text-[13.5px]">
+            <div className="min-w-0">{l.designation}<span className="mt-0.5 block text-xs text-gris">{String(l.quantite).replace('.', ',')} {l.unite} × {euros(l.prixUnitaireHt)}{l.estimation && <> · <span className="font-semibold text-flash-700">prix estimé</span></>}</span></div>
+            <b className="shrink-0">{euros(totalLigne(l))}</b>
+          </div>
+        ))}
+        {entreprise.regimeTva === 'normal' && <div className="space-y-0.5 pt-2.5 text-[13px] text-gris">
           <div className="flex justify-between"><span>Total HT</span><span>{euros(t.ht)}</span></div>
-          {t.tva.map(v => <div key={v.taux} className="flex justify-between text-slate-600"><span>TVA {String(v.taux).replace('.', ',')} %</span><span>{euros(v.montant)}</span></div>)}
-          <div className="flex justify-between border-t pt-1 text-base font-extrabold"><span>{entreprise.regimeTva === 'franchise' ? 'Total' : 'Total TTC'}</span><span>{euros(t.ttc)}</span></div>
-          {entreprise.acomptePct > 0 && !d.facture && <div className="flex justify-between text-slate-600"><span>Acompte {entreprise.acomptePct} %</span><span>{euros(acompte(t.ttc, entreprise.acomptePct))}</span></div>}
-        </div>
+          {t.tva.map(v => <div key={v.taux} className="flex justify-between"><span>TVA {String(v.taux).replace('.', ',')} %</span><span>{euros(v.montant)}</span></div>)}
+        </div>}
+        <div className="flex justify-between py-3 text-[17px] font-extrabold"><span>{entreprise.regimeTva === 'franchise' ? 'Total' : 'Total TTC'}</span><span>{euros(t.ttc)}</span></div>
+        {entreprise.acomptePct > 0 && !d.facture && <div className="-mt-2 flex justify-between pb-3 text-[13px] text-gris"><span>Acompte {entreprise.acomptePct} %</span><span>{euros(acompte(t.ttc, entreprise.acomptePct))}</span></div>}
       </section>
-      {d.signature && <p className="text-sm text-green-700">Signé par {d.signature.nom} le {new Date(d.signature.date).toLocaleDateString('fr-FR')}.</p>}
-      {!d.facture && <button onClick={() => { if (confirm('Supprimer ce devis ?')) supprimerDevis(d.id).then(() => nav('/app'), echec); }} className="text-sm text-red-600 underline">Supprimer le devis</button>}
+      {d.remarques && <p className="mt-3 whitespace-pre-line rounded-[14px] bg-white px-3.5 py-3 text-[13px] text-encre-600">{d.remarques}</p>}
+      {info && <p role="status" className="mt-3 text-center text-sm text-encre-600">{info}</p>}
+
+      <div className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-papier from-75% to-transparent px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5">
+        <div className="mx-auto flex max-w-lg gap-2">
+          <button onClick={principal[1]} disabled={occupe} className="btn-primaire flex-1 rounded-2xl py-4 text-base font-extrabold">{occupe ? 'Un instant…' : principal[0]}</button>
+          <button onClick={() => setMenu(true)} aria-label="Autres actions" className="grid w-14 place-items-center rounded-2xl border border-trait bg-white"><IcSuite className="h-[22px] w-[22px]" /></button>
+        </div>
+      </div>
+      <Feuille ouverte={menu} fermer={() => setMenu(false)}>
+        <ul>{secondaires.map(([Ic, lib, f, danger]) => (
+          <li key={lib}><button onClick={f} className={`flex w-full items-center gap-3 border-b border-[#f0ece4] px-1 py-3.5 text-left text-[15px] font-semibold last:border-0 ${danger ? 'text-alerte' : ''}`}><Ic className="h-5 w-5" />{lib}</button></li>
+        ))}</ul>
+      </Feuille>
     </div>
   );
 }
