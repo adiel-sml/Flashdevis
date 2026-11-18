@@ -5,9 +5,10 @@ import { prochainNumero } from './calcul';
 import { supabase } from './supabase';
 import { entrepriseVide, type Devis, type Entreprise, type Tarif } from './types';
 
-interface Etat { entreprise: Entreprise; tarifs: Tarif[]; devis: Devis[]; plan: 'gratuit' | 'pro'; pret: boolean }
+export interface Abonnement { statut: string | null; fin: string | null }
+interface Etat { entreprise: Entreprise; tarifs: Tarif[]; devis: Devis[]; plan: 'gratuit' | 'pro'; abonnement: Abonnement; pret: boolean }
 const CLE = 'flashdevis:v1';
-const vide: Etat = { entreprise: entrepriseVide, tarifs: [], devis: [], plan: 'gratuit', pret: false };
+const vide: Etat = { entreprise: entrepriseVide, tarifs: [], devis: [], plan: 'gratuit', abonnement: { statut: null, fin: null }, pret: false };
 
 export class ErreurQuota extends Error { constructor() { super('Vous avez utilisé vos 3 devis gratuits du mois. Passez à l’offre Pro pour des devis illimités.'); } }
 
@@ -63,7 +64,7 @@ export async function charger() {
     supabase.from('devis').select('*').order('cree_le', { ascending: false }),
   ]);
   const ent = verifier(e) as Ligne;
-  publier({ entreprise: versEntreprise(ent), plan: ent.plan as Etat['plan'], tarifs: (verifier(t) as Ligne[]).map(versTarif), devis: (verifier(d) as Ligne[]).map(versDevis), pret: true });
+  publier({ entreprise: versEntreprise(ent), plan: ent.plan as Etat['plan'], abonnement: { statut: (ent.abonnement_statut as string) ?? null, fin: (ent.abonnement_fin as string) ?? null }, tarifs: (verifier(t) as Ligne[]).map(versTarif), devis: (verifier(d) as Ligne[]).map(versDevis), pret: true });
 }
 export const vider = () => publier({ ...vide, pret: false });
 

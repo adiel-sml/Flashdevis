@@ -196,7 +196,7 @@ export default function EditeurDevis() {
 
       <div className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-papier from-75% to-transparent px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5">
         <div className="mx-auto max-w-lg">
-          {quota && <p role="alert" className="mb-2 rounded-xl bg-flash-100 px-3 py-2 text-sm">{new ErreurQuota().message} <Link to="/#tarifs" className="font-bold underline">Voir l’offre Pro</Link></p>}
+          {quota && <p role="alert" className="mb-2 rounded-xl bg-flash-100 px-3 py-2 text-sm">{new ErreurQuota().message} <Link to="/app/profil" className="font-bold underline">Essayer Pro 14 jours</Link></p>}
           {erreur && <p role="alert" className="mb-2 rounded-xl bg-alerte-pale px-3 py-2 text-sm text-alerte">{erreur}</p>}
           <div className="flex items-center gap-3">
             <div className="shrink-0"><p className="text-xs text-gris">{entreprise.regimeTva === 'normal' ? 'Total TTC' : 'Total'}</p><p className="text-lg font-extrabold">{euros(t.ttc)}</p></div>

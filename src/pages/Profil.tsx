@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react';
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Avatar, EnTete } from '../components/Elements';
 import { IcBatiment, IcBouclier, IcCarte, IcChevron, IcCorbeille, IcListe, IcPlus, IcRetour } from '../components/Icones';
+import { allerVersStripe, attendrePro } from '../lib/abonnement';
 import { enregistrerEntreprise, enregistrerTarifs, id, useEtat } from '../lib/store';
 import { conformite, devisDuMois, QUOTA_GRATUIT } from '../lib/suivi';
 import { supabase } from '../lib/supabase';
@@ -14,9 +15,25 @@ const Item = ({ to, Ic, lib, valeur }: { to: string; Ic: typeof IcListe; lib: st
 );
 
 export default function Profil() {
-  const { entreprise: e, tarifs, devis, plan } = useEtat();
+  const { entreprise: e, tarifs, devis, plan, abonnement } = useEtat();
   const c = conformite(e);
   const utilises = Math.min(QUOTA_GRATUIT, devisDuMois(devis));
+  const [params, setParams] = useSearchParams();
+  const [paiement, setPaiement] = useState<'' | 'attente' | 'ok' | 'lent'>(params.get('abonnement') === 'ok' ? 'attente' : '');
+  const [occupe, setOccupe] = useState(false);
+  const [erreur, setErreur] = useState('');
+  useEffect(() => {
+    if (paiement !== 'attente') return;
+    setParams({}, { replace: true });
+    attendrePro().then(ok => setPaiement(ok ? 'ok' : 'lent'), () => setPaiement('lent'));
+  }, [paiement, setParams]);
+  const stripe = (action: 'essai' | 'gerer') => async () => {
+    if (!supabase) { location.href = '/#tarifs'; return; }
+    setOccupe(true); setErreur('');
+    try { await allerVersStripe(action); } catch (x) { setErreur(x instanceof Error ? x.message : 'Paiement indisponible.'); setOccupe(false); }
+  };
+  const finLe = abonnement.fin ? new Date(abonnement.fin).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) : '';
+  const detailPro = abonnement.statut === 'trialing' ? `Essai gratuit jusqu’au ${finLe}` : abonnement.statut === 'past_due' ? 'Paiement en attente : mettez à jour votre carte' : finLe ? `Renouvelé le ${finLe}` : 'Devis et factures illimités';
   return (
     <div>
       <EnTete titre="Profil" />
@@ -36,12 +53,19 @@ export default function Profil() {
         <Item to="/app/profil/paiement" Ic={IcCarte} lib="Paiement et acompte" valeur={`${e.acomptePct} %`} />
       </div>
       <div className="mt-3.5 flex items-center justify-between gap-3 rounded-[18px] bg-encre-900 p-4 text-white">
-        {plan === 'pro' ? <div><b className="block">Offre Pro</b><span className="text-[12.5px] text-[#b9bfca]">Devis et factures illimités</span></div> : <>
+        {plan === 'pro' ? <>
+          <div><b className="block text-[15px]">Offre Pro</b><span className={`text-[12.5px] ${abonnement.statut === 'past_due' ? 'text-flash-400' : 'text-[#b9bfca]'}`}>{detailPro}</span></div>
+          {abonnement.statut && <button onClick={stripe('gerer')} disabled={occupe} className="shrink-0 rounded-[11px] border border-encre-600 px-3 py-2 text-[13px] font-bold">{occupe ? '…' : 'Gérer'}</button>}
+        </> : <>
           <div><b className="block text-[15px]">Offre Découverte</b><span className="text-[12.5px] text-[#b9bfca]">{utilises} devis sur {QUOTA_GRATUIT} utilisés ce mois-ci</span>
             <div className="mt-2 flex gap-1">{Array.from({ length: QUOTA_GRATUIT }, (_, i) => <i key={i} className={`h-1.5 w-[26px] rounded ${i < utilises ? 'bg-flash-500' : 'bg-encre-600'}`} />)}</div></div>
-          <Link to="/#tarifs" className="shrink-0 rounded-[11px] bg-flash-500 px-3 py-2 text-[13px] font-extrabold text-encre-900">Passer Pro</Link>
+          <button onClick={stripe('essai')} disabled={occupe} className="shrink-0 rounded-[11px] bg-flash-500 px-3 py-2 text-[13px] font-extrabold text-encre-900">{occupe ? '…' : abonnement.statut ? 'Reprendre Pro' : 'Essai 14 jours'}</button>
         </>}
       </div>
+      {paiement === 'attente' && <p role="status" className="mt-2 text-center text-[13px] text-gris">Activation de votre offre Pro…</p>}
+      {paiement === 'ok' && <p role="status" className="mt-2 rounded-xl bg-ok-pale px-3 py-2 text-center text-[13px] font-semibold text-ok">Offre Pro activée. Devis illimités.</p>}
+      {paiement === 'lent' && <p role="status" className="mt-2 text-center text-[13px] text-gris">Paiement reçu. L’offre Pro s’active dans quelques instants, rechargez la page si besoin.</p>}
+      {erreur && <p role="alert" className="mt-2 text-center text-[13px] text-alerte">{erreur}</p>}
       <div className="mt-3.5 overflow-hidden rounded-[18px] border border-trait bg-white">
         <Link to="/" className="flex items-center px-3.5 py-3.5 text-[14.5px] font-semibold">Découvrir FlashDevis<IcChevron className="ml-auto h-4 w-4 text-[#c0b9ab]" /></Link>
         {supabase && <button onClick={() => supabase!.auth.signOut()} className="w-full border-t border-[#f0ece4] px-3.5 py-3.5 text-left text-[14.5px] font-semibold text-alerte">Se déconnecter</button>}
