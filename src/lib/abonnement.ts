@@ -6,6 +6,7 @@ export async function allerVersStripe(action: 'essai' | 'gerer') {
   const jeton = await jetonAcces();
   const r = await fetch('/api/abonnement', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}) }, body: JSON.stringify({ action }) });
   const data = await r.json().catch(() => ({}));
+  if (data.repris) await charger();   // l'abonnement de test a été oublié : la carte repasse en offre Découverte
   if (!r.ok || !data.url) throw new Error(data.erreur || 'Le paiement est indisponible pour le moment.');
   location.href = data.url;
 }

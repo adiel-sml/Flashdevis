@@ -2,6 +2,11 @@
 import Stripe from 'stripe';
 import { admin, origine, utilisateur, type Req, type Res } from './_serveur.js';
 
+export async function clientExiste(stripe: Stripe, id: string) {
+  try { const c = await stripe.customers.retrieve(id); return !('deleted' in c && c.deleted); }
+  catch (e) { if ((e as { code?: string }).code === 'resource_missing') return false; throw e; }
+}
+
 export default async function handler(req: Req, res: Res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ erreur: 'Méthode non autorisée' });
@@ -15,15 +20,18 @@ export default async function handler(req: Req, res: Res) {
   if (error || !ent) return res.status(500).json({ erreur: 'Compte introuvable.' });
 
   try {
-    // Client Stripe créé une seule fois par artisan, relié à son compte
-    let client = ent.stripe_customer_id as string | null;
+    // Client Stripe créé une seule fois par artisan, relié à son compte. Un client créé dans l'autre mode (test au lieu de live)
+    // ou supprimé n'existe pas pour cette clé : on en crée un nouveau et l'abonnement de l'autre mode est oublié.
+    let client = ent.stripe_customer_id as string | null, statut = ent.abonnement_statut as string | null, repris = false;
+    if (client && !(await clientExiste(stripe, client))) { client = null; statut = null; repris = !!ent.abonnement_statut; }
     if (!client) {
       const c = await stripe.customers.create({ email: ent.email || user.email, name: ent.nom || undefined, metadata: { user_id: user.id } });
       client = c.id;
-      await db.from('entreprises').update({ stripe_customer_id: client }).eq('user_id', user.id);
+      await db.from('entreprises').update({ stripe_customer_id: client, ...(ent.stripe_customer_id ? { plan: 'gratuit', abonnement_statut: null, abonnement_fin: null } : {}) }).eq('user_id', user.id);
     }
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body ?? {});
     if ((body as { action?: string }).action === 'gerer') {
+      if (repris) return res.status(409).json({ erreur: 'Votre abonnement venait du mode test de Stripe. Relancez l’essai Pro pour vous abonner pour de vrai.', repris: true });
       const p = await stripe.billingPortal.sessions.create({ customer: client, return_url: `${site}/app/profil`, locale: 'fr' });
       return res.status(200).json({ url: p.url });
     }
@@ -31,7 +39,7 @@ export default async function handler(req: Req, res: Res) {
       mode: 'subscription', customer: client, client_reference_id: user.id, locale: 'fr',
       line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
       // essai de 14 jours offert seulement au premier abonnement
-      subscription_data: { metadata: { user_id: user.id }, ...(ent.abonnement_statut ? {} : { trial_period_days: 14 }) },
+      subscription_data: { metadata: { user_id: user.id }, ...(statut ? {} : { trial_period_days: 14 }) },
       allow_promotion_codes: true, tax_id_collection: { enabled: true }, customer_update: { name: 'auto', address: 'auto' }, billing_address_collection: 'required',
       success_url: `${site}/app/profil?abonnement=ok`, cancel_url: `${site}/app/profil`,
     });
