@@ -1,9 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Avatar, EnTete } from '../components/Elements';
+import { Avatar, EnTete, Feuille } from '../components/Elements';
 import { IcBatiment, IcBouclier, IcCarte, IcChevron, IcCorbeille, IcListe, IcPlus, IcRetour } from '../components/Icones';
 import { allerVersStripe, attendrePro } from '../lib/abonnement';
-import { enregistrerEntreprise, enregistrerTarifs, id, useEtat } from '../lib/store';
+import { reduireLogo, telecharger } from '../lib/image';
+import { supprimerCompte } from '../lib/compte';
+import { enregistrerEntreprise, enregistrerTarifs, getEtat, id, useEtat } from '../lib/store';
 import { conformite, devisDuMois, QUOTA_GRATUIT } from '../lib/suivi';
 import { supabase } from '../lib/supabase';
 import type { Entreprise, Tarif } from '../lib/types';
@@ -38,7 +40,7 @@ export default function Profil() {
     <div>
       <EnTete titre="Profil" />
       <Link to="/app/profil/entreprise" className="carte flex items-center gap-3.5 !rounded-[22px] !p-4">
-        <Avatar nom={e.nom || 'Mon entreprise'} taille="h-14 w-14 text-xl" sombre />
+        <Avatar nom={e.nom || 'Mon entreprise'} taille="h-14 w-14 text-xl" sombre src={e.logo} />
         <span className="min-w-0"><b className="block truncate text-[17px] font-extrabold">{e.nom || 'Mon entreprise'}</b><span className="block truncate text-[13px] text-gris">{[e.metier, e.adresse.split(',').at(-1)?.trim()].filter(Boolean).join(' · ') || 'Touchez pour compléter'}</span></span>
       </Link>
       <div className="carte mt-3">
@@ -67,7 +69,8 @@ export default function Profil() {
       {paiement === 'lent' && <p role="status" className="mt-2 text-center text-[13px] text-gris">Paiement reçu. L’offre Pro s’active dans quelques instants, rechargez la page si besoin.</p>}
       {erreur && <p role="alert" className="mt-2 text-center text-[13px] text-alerte">{erreur}</p>}
       <div className="mt-3.5 overflow-hidden rounded-[18px] border border-trait bg-white">
-        <Link to="/" className="flex items-center px-3.5 py-3.5 text-[14.5px] font-semibold">Découvrir FlashDevis<IcChevron className="ml-auto h-4 w-4 text-[#c0b9ab]" /></Link>
+        <Link to="/app/profil/donnees" className="flex items-center px-3.5 py-3.5 text-[14.5px] font-semibold">Mes données<IcChevron className="ml-auto h-4 w-4 text-[#c0b9ab]" /></Link>
+        <Link to="/conditions" className="flex items-center border-t border-[#f0ece4] px-3.5 py-3.5 text-[14.5px] font-semibold">Conditions et confidentialité<IcChevron className="ml-auto h-4 w-4 text-[#c0b9ab]" /></Link>
         {supabase && <button onClick={() => supabase!.auth.signOut()} className="w-full border-t border-[#f0ece4] px-3.5 py-3.5 text-left text-[14.5px] font-semibold text-alerte">Se déconnecter</button>}
       </div>
     </div>
@@ -93,6 +96,7 @@ function FormEntreprise({ section }: { section: 'entreprise' | 'tva' | 'paiement
   return (
     <Rubrique titre={titres[section]} pied={<><button onClick={enregistrer} disabled={envoi} className="btn-primaire w-full py-3.5 text-base">{envoi ? 'Enregistrement…' : 'Enregistrer'}</button>{erreur && <p role="alert" className="mt-2 text-sm text-alerte">{erreur}</p>}</>}>
       {section === 'entreprise' && <>
+        <ChoixLogo logo={e.logo} changer={logo => setE({ ...e, logo })} />
         <Champ lib="Nom ou raison sociale">{txt('nom')}</Champ>
         <Champ lib="Métier">{txt('metier', { placeholder: 'Plombier chauffagiste' })}</Champ>
         <Champ lib="SIRET" aide="14 chiffres, obligatoire sur vos devis.">{txt('siret', { inputMode: 'numeric' })}</Champ>
@@ -145,7 +149,63 @@ function FormTarifs() {
   );
 }
 
-const Rubrique = ({ titre, children, pied }: { titre: string; children: ReactNode; pied: ReactNode }) => (
+function ChoixLogo({ logo, changer }: { logo?: string | null; changer: (l: string | null) => void }) {
+  const [erreur, setErreur] = useState('');
+  const choisir = async (f?: File) => { if (!f) return; setErreur(''); try { changer(await reduireLogo(f)); } catch (x) { setErreur(x instanceof Error ? x.message : 'Image illisible.'); } };
+  return (
+    <div>
+      <span className="etiquette">Logo (sur vos devis et factures)</span>
+      <div className="flex items-center gap-3">
+        <label className="grid h-16 w-24 cursor-pointer place-items-center overflow-hidden rounded-xl border border-dashed border-gris/50 bg-white">
+          {logo ? <img src={logo} alt="Logo" className="h-full w-full object-contain p-1.5" /> : <IcPlus className="h-6 w-6 text-gris" />}
+          <input type="file" accept="image/png,image/jpeg" className="sr-only" onChange={ev => choisir(ev.target.files?.[0])} />
+        </label>
+        <div className="text-[13px] text-gris">{logo ? <button type="button" onClick={() => changer(null)} className="font-semibold text-alerte">Retirer le logo</button> : 'PNG ou JPEG. Il est réduit automatiquement.'}</div>
+      </div>
+      {erreur && <p role="alert" className="mt-1 text-xs text-alerte">{erreur}</p>}
+    </div>
+  );
+}
+
+// Droits RGPD : récupérer toutes ses données, supprimer son compte
+function MesDonnees() {
+  const [confirmer, setConfirmer] = useState(false);
+  const [saisie, setSaisie] = useState('');
+  const [envoi, setEnvoi] = useState(false);
+  const [erreur, setErreur] = useState('');
+  const exporter = () => {
+    const { entreprise, tarifs, devis } = getEtat();
+    telecharger(`flashdevis-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ exporte_le: new Date().toISOString(), entreprise, tarifs, devis }, null, 2));
+  };
+  async function supprimer() {
+    setEnvoi(true); setErreur('');
+    try { await supprimerCompte(); location.href = '/'; } catch (x) { setErreur(x instanceof Error ? x.message : 'Suppression impossible.'); setEnvoi(false); }
+  }
+  return (
+    <Rubrique titre="Mes données" pied={null}>
+      <div className="carte">
+        <b className="block">Exporter mes données</b>
+        <p className="mt-1 text-[13px] text-gris">Votre entreprise, vos tarifs, tous vos devis et factures, dans un fichier que vous gardez.</p>
+        <button onClick={exporter} className="btn-secondaire mt-3 w-full">Télécharger mes données</button>
+      </div>
+      <div className="carte">
+        <b className="block text-alerte">Supprimer mon compte</b>
+        <p className="mt-1 text-[13px] text-gris">Tout est effacé définitivement, et votre abonnement est arrêté. Vos factures doivent être conservées 10 ans : exportez-les avant.</p>
+        <button onClick={() => setConfirmer(true)} className="btn mt-3 w-full border border-alerte/30 text-alerte">Supprimer mon compte</button>
+      </div>
+      <Feuille ouverte={confirmer} fermer={() => setConfirmer(false)}>
+        <p className="text-lg font-extrabold">Supprimer définitivement ?</p>
+        <p className="mt-1 text-sm text-gris">Devis, factures, clients et tarifs seront effacés. Tapez <b className="text-encre-900">SUPPRIMER</b> pour confirmer.</p>
+        <input className="champ mt-3" value={saisie} onChange={ev => setSaisie(ev.target.value)} autoCapitalize="characters" />
+        <button onClick={exporter} className="btn-secondaire mt-3 w-full">Télécharger mes données d’abord</button>
+        <button onClick={supprimer} disabled={saisie.trim().toUpperCase() !== 'SUPPRIMER' || envoi} className="btn mt-2 w-full bg-alerte text-white">{envoi ? 'Suppression…' : 'Supprimer mon compte'}</button>
+        {erreur && <p role="alert" className="mt-2 text-sm text-alerte">{erreur}</p>}
+      </Feuille>
+    </Rubrique>
+  );
+}
+
+const Rubrique = ({ titre, children, pied }: { titre: string; children: ReactNode; pied: ReactNode | null }) => (
   <div>
     <Link to="/app/profil" className="mb-3 mt-1 inline-flex items-center gap-1.5 text-sm font-semibold text-gris"><IcRetour className="h-5 w-5" />Profil</Link>
     <h1 className="titre-page mb-4">{titre}</h1>
@@ -157,6 +217,7 @@ const Rubrique = ({ titre, children, pied }: { titre: string; children: ReactNod
 export function RubriqueProfil() {
   const { section } = useParams();
   if (section === 'tarifs') return <FormTarifs />;
+  if (section === 'donnees') return <MesDonnees />;
   if (section === 'entreprise' || section === 'tva' || section === 'paiement') return <FormEntreprise key={section} section={section} />;
   return <Navigate to="/app/profil" replace />;
 }

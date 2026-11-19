@@ -42,7 +42,7 @@ Règles :
 - N'invente ni nom de client, ni adresse, ni remise. Signale dans remarques ce qui est ambigu ou à confirmer.
 - Désignations courtes et professionnelles, en français.`;
 
-// shortcut: limite en mémoire par instance (contournable en multipliant les instances), passer à Upstash/Vercel KV au lancement public
+// Repli quand la base ne tient pas la limite (mode démo ou migration 0003 absente) : limite en mémoire par instance du serveur
 const fenetre = new Map<string, number[]>();
 function tropDeRequetes(ip: string, max = 20, ms = 60 * 60 * 1000) {
   const maintenant = Date.now(), liste = (fenetre.get(ip) ?? []).filter(t => maintenant - t < ms);
@@ -64,8 +64,12 @@ export default async function handler(req: Req, res: Res) {
     const { data } = jeton ? await createClient(url, anon, { auth: { persistSession: false } }).auth.getUser(jeton) : { data: { user: null } };
     if (!data.user) return res.status(401).json({ erreur: 'Connectez-vous pour générer un devis.' });
     cle = data.user.id;
+    // Limite tenue par la base (20 par heure, 60 par jour) ; sans la migration 0003, repli sur la limite en mémoire ci-dessous
+    const r = await createClient(url, anon, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${jeton}` } } }).rpc('consommer_generation');
+    if (!r.error && r.data === false) return res.status(429).json({ erreur: 'Vous avez rédigé beaucoup de devis aujourd’hui. Réessayez dans un moment.' });
+    if (!r.error) cle = '';
   }
-  if (tropDeRequetes(cle)) return res.status(429).json({ erreur: 'Trop de devis générés en une heure. Réessayez un peu plus tard.' });
+  if (cle && tropDeRequetes(cle)) return res.status(429).json({ erreur: 'Trop de devis générés en une heure. Réessayez un peu plus tard.' });
   const entree = Entree.safeParse(typeof req.body === 'string' ? JSON.parse(req.body) : req.body);
   if (!entree.success) return res.status(400).json({ erreur: 'Décrivez le chantier en quelques phrases (2 000 caractères au plus).' });
   if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ erreur: 'Service de génération non configuré.' });

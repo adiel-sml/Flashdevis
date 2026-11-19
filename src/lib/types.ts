@@ -15,6 +15,7 @@ export interface Entreprise {
   validiteJours: number;
   conditionsPaiement: string;
   acomptePct: number;
+  logo?: string | null; // image réduite (data URL PNG ou JPEG), en tête des devis et factures
 }
 
 export interface Tarif {

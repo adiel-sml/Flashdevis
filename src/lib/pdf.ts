@@ -17,10 +17,18 @@ export function pdfDocument(d: Devis, e: Entreprise, mode: 'devis' | 'facture'):
 
   // En-tête : entreprise à gauche, document à droite
   doc.setFillColor(...flash).rect(0, 0, 210, 4, 'F');
-  doc.setTextColor(...encre).setFont('helvetica', 'bold').setFontSize(15).text(e.nom || 'Votre entreprise', 15, 18);
+  // Logo de l'artisan en haut à gauche (16 mm de haut, 45 mm de large au plus), le texte de l'en-tête passe dessous
+  let yNom = 18;
+  if (e.logo) {
+    try {
+      const p = doc.getImageProperties(e.logo), k = Math.min(45 / p.width, 16 / p.height);
+      doc.addImage(e.logo, p.fileType, 15, 9, p.width * k, p.height * k); yNom = 32;
+    } catch { /* image illisible : document sans logo */ }
+  }
+  doc.setTextColor(...encre).setFont('helvetica', 'bold').setFontSize(15).text(e.nom || 'Votre entreprise', 15, yNom);
   doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(70);
   const ident = [e.metier, e.adresse, [e.telephone, e.email].filter(Boolean).join(' · '), e.siret && `SIRET : ${e.siret}`, e.regimeTva === 'normal' && e.numeroTva && `TVA intracommunautaire : ${e.numeroTva}`].filter(Boolean) as string[];
-  doc.text(ident.flatMap(l => doc.splitTextToSize(l, 95)), 15, 24);
+  doc.text(ident.flatMap(l => doc.splitTextToSize(l, 95)), 15, yNom + 6);
 
   doc.setTextColor(...encre).setFont('helvetica', 'bold').setFontSize(20).text(facture ? 'FACTURE' : 'DEVIS', 195, 18, { align: 'right' });
   doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(70);

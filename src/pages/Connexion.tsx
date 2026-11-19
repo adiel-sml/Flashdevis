@@ -28,6 +28,7 @@ export default function Connexion() {
           <label><span className="etiquette">E-mail</span><input type="email" required autoComplete="email" className="champ" value={email} onChange={e => setEmail(e.target.value)} /></label>
           <button className="btn-primaire w-full" disabled={etat === 'envoi'}>{etat === 'envoi' ? 'Envoi…' : 'Recevoir mon lien'}</button>
           {erreur && <p role="alert" className="text-sm text-red-700">{erreur}</p>}
+          <p className="text-xs text-gris">En continuant, vous acceptez les <Link to="/conditions" className="underline">conditions générales</Link> et la <Link to="/confidentialite" className="underline">politique de confidentialité</Link>.</p>
         </form>
       )}
     </div>

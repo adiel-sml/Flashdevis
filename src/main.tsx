@@ -12,6 +12,8 @@ import { FicheClient, ListeClients } from './pages/Clients';
 import Profil, { RubriqueProfil } from './pages/Profil';
 import Signature from './pages/Signature';
 import Connexion from './pages/Connexion';
+import Legal from './pages/Legal';
+import Bienvenue from './pages/Bienvenue';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -20,8 +22,10 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/" element={<Accueil />} />
         <Route path="/s/:jeton" element={<Signature />} />
         <Route path="/connexion" element={<Connexion />} />
+        {['/mentions-legales', '/conditions', '/confidentialite'].map(p => <Route key={p} path={p} element={<Legal />} />)}
         <Route path="/app" element={<Cadre />}>
           <Route index element={<TableauDeBord />} />
+          <Route path="bienvenue" element={<Bienvenue />} />
           <Route path="nouveau" element={<EditeurDevis />} />
           <Route path="devis/:id" element={<DetailDevis />} />
           <Route path="devis/:id/modifier" element={<EditeurDevis />} />

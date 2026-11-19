@@ -10,9 +10,9 @@ export const Statut = ({ d, className = '' }: { d: Devis; className?: string }) 
   return <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${COULEUR[s.ton]} ${className}`}><i className={`h-[7px] w-[7px] rounded-full ${POINT[s.ton]}`} />{s.libelle}</span>;
 };
 
-export const Avatar = ({ nom, taille = 'h-10 w-10 text-sm', sombre = false }: { nom: string; taille?: string; sombre?: boolean }) => (
-  <span className={`grid shrink-0 place-items-center rounded-xl font-bold ${taille} ${sombre ? 'bg-encre-900 text-flash-500' : 'bg-creme text-encre-600'}`}>{initiales(nom)}</span>
-);
+export const Avatar = ({ nom, taille = 'h-10 w-10 text-sm', sombre = false, src }: { nom: string; taille?: string; sombre?: boolean; src?: string | null }) => src
+  ? <img src={src} alt="" className={`shrink-0 rounded-xl border border-trait bg-white object-contain p-1 ${taille}`} />
+  : <span className={`grid shrink-0 place-items-center rounded-xl font-bold ${taille} ${sombre ? 'bg-encre-900 text-flash-500' : 'bg-creme text-encre-600'}`}>{initiales(nom)}</span>;
 
 export const eurosRond = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
 

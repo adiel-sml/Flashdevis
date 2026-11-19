@@ -1,3 +1,4 @@
+import { PiedLegal } from './Legal';
 import { Link } from 'react-router-dom';
 import { Logo } from '../components/Cadre';
 
@@ -48,7 +49,7 @@ export default function Accueil() {
           <div className="mt-8 text-center"><Link to="/app/nouveau" className="btn-primaire px-6 py-3 text-base">Commencer gratuitement</Link></div>
         </div>
       </section>
-      <footer className="mx-auto max-w-5xl px-4 py-8 text-sm text-slate-500">© {new Date().getFullYear()} FlashDevis</footer>
+      <PiedLegal />
     </div>
   );
 }

@@ -43,7 +43,7 @@ export default function TableauDeBord() {
     <div>
       <div className="mb-5 mt-2 flex items-center justify-between">
         <div><h1 className="text-[22px] font-extrabold tracking-tight">Bonjour{entreprise.nom ? `, ${entreprise.nom.split(' ')[0]}` : ''}</h1><p className="text-[13px] text-gris">{aujourdhui}</p></div>
-        <Link to="/app/profil" aria-label="Profil"><Avatar nom={entreprise.nom || 'F D'} sombre /></Link>
+        <Link to="/app/profil" aria-label="Profil"><Avatar nom={entreprise.nom || 'F D'} sombre src={entreprise.logo} /></Link>
       </div>
 
       {devis.length === 0 ? (

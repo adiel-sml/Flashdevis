@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { charger, useEtat, vider } from '../lib/store';
 import { supabase } from '../lib/supabase';
+import { CLE_PLUS_TARD } from '../pages/Bienvenue';
 import { IcAccueil, IcClients, IcDevis, IcMicro, IcProfil } from './Icones';
 
 export const Logo = ({ clair = false }: { clair?: boolean }) => (
@@ -36,7 +37,7 @@ function Navigation() {
 }
 
 export default function Cadre() {
-  const { pret } = useEtat();
+  const { pret, entreprise } = useEtat();
   const { pathname } = useLocation();
   // Avec Supabase, l'appli demande une session ; en mode démo, accès direct
   const [session, setSession] = useState<'attente' | 'absente' | 'ok'>(supabase ? 'attente' : 'ok');
@@ -57,8 +58,11 @@ export default function Cadre() {
   if (session === 'absente') return <Navigate to="/connexion" replace />;
   if (erreur) return <p role="alert" className="mx-auto mt-10 max-w-md carte text-alerte">{erreur}</p>;
   if (session === 'attente' || !pret) return <div className="grid min-h-screen place-items-center"><span className="h-8 w-8 animate-spin rounded-full border-[3px] border-trait border-t-encre-900" aria-label="Chargement" /></div>;
-  // Création et fiche d'un devis : plein écran, avec leurs propres actions en bas
-  const pleinEcran = /^\/app\/(nouveau|devis\/[^/]+)/.test(pathname);
+  // Premier lancement : quelques questions avant tout (sauf si l'artisan a choisi « Plus tard »)
+  let plusTard = false; try { plusTard = !!localStorage.getItem(CLE_PLUS_TARD); } catch { /* stockage indisponible */ }
+  if (!entreprise.nom && !plusTard && pathname !== '/app/bienvenue') return <Navigate to="/app/bienvenue" replace />;
+  // Création et fiche d'un devis, premier lancement : plein écran, avec leurs propres actions en bas
+  const pleinEcran = /^\/app\/(nouveau|bienvenue|devis\/[^/]+)/.test(pathname);
   return (
     <div className="min-h-screen">
       <main className={`mx-auto max-w-lg px-5 pt-[max(1rem,env(safe-area-inset-top))] ${pleinEcran ? 'pb-36' : 'pb-32'}`}><Outlet /></main>

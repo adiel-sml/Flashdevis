@@ -68,11 +68,12 @@ En local, la génération demande la fonction serveur : lancez `vercel dev` avec
 1. Créer un projet sur supabase.com (région Europe, par exemple Paris ou Francfort).
 2. **SQL Editor**, coller le contenu de `supabase/migrations/0001_schema.sql`, puis **Run**.
    Puis, de la même façon, `supabase/migrations/0002_suivi.sql` (dates d'envoi et de paiement, ouvertures du lien de signature, utilisées par le tableau de bord).
+   Puis `supabase/migrations/0003_lancement.sql` (logo de l'artisan, limite de rédactions par l'assistant tenue par la base).
 3. **Authentication**, puis **URL Configuration** : mettre l'adresse du site Vercel dans **Site URL** et ajouter `https://<votre-site>/app` dans **Redirect URLs**.
 4. **Project Settings**, puis **API** : copier **Project URL** et la clé **anon public**.
 5. Dans Vercel, ajouter `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY`, puis redéployer. La clé anon est publique par conception : la sécurité repose sur les règles de la base. Ne jamais mettre la clé `service_role` dans l'appli.
 
-Tester les règles en local, sur une base PostgreSQL 16 vide : `psql -f supabase/tests/00_simulation_supabase.sql -f supabase/migrations/0001_schema.sql -f supabase/tests/01_regles.sql`, puis dans une nouvelle session `psql -f supabase/migrations/0002_suivi.sql` et `psql -f supabase/tests/02_suivi.sql`.
+Tester les règles en local, sur une base PostgreSQL 16 vide : `psql -f supabase/tests/00_simulation_supabase.sql -f supabase/migrations/0001_schema.sql -f supabase/tests/01_regles.sql`, puis dans une nouvelle session `psql -f supabase/migrations/0002_suivi.sql` et `psql -f supabase/tests/02_suivi.sql`, de même pour `0003_lancement.sql` et `03_lancement.sql`.
 
 ## Brancher Stripe (offre Pro)
 
@@ -82,3 +83,11 @@ Tester les règles en local, sur une base PostgreSQL 16 vide : `psql -f supabase
 4. **Paramètres**, puis **Facturation**, **Portail client** : activer le portail (résiliation et changement de carte par l'artisan).
 5. Dans Vercel, ajouter en **Secret** : `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `SUPABASE_SERVICE_ROLE_KEY` (Supabase, Project Settings, API Keys, clé `service_role` ou `secret`), et en **Config** : `STRIPE_PRICE_ID`. Puis redéployer.
 6. Tester avec la carte `4242 4242 4242 4242`, une date future et n'importe quel code. Pour la production, refaire les étapes 1 à 5 en mode live.
+
+## E-mails de connexion par Brevo
+
+Le service d'envoi intégré à Supabase est limité à quelques e-mails par heure. Dans Supabase, **Authentication**, puis **Emails** et **SMTP Settings** : activer le SMTP personnalisé avec `smtp-relay.brevo.com`, port `587`, l'identifiant SMTP de Brevo et une clé SMTP (Brevo, **SMTP et API**). L'adresse d'expéditeur doit être validée dans Brevo (**Expéditeurs, domaines et IP dédiées**). Relever ensuite la limite d'envoi dans **Authentication**, **Rate Limits**.
+
+## Mentions légales
+
+Les informations de l'éditeur (statut, adresse, SIRET, e-mail de contact) se règlent dans `src/lib/editeur.ts`.

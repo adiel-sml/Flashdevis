@@ -37,11 +37,13 @@ type Ligne = Record<string, unknown>;
 const versEntreprise = (r: Ligne): Entreprise => ({
   nom: r.nom as string, metier: r.metier as string, siret: r.siret as string, adresse: r.adresse as string, email: r.email as string, telephone: r.telephone as string,
   regimeTva: r.regime_tva as Entreprise['regimeTva'], numeroTva: r.numero_tva as string, assurance: r.assurance as string, validiteJours: Number(r.validite_jours),
-  conditionsPaiement: r.conditions_paiement as string, acomptePct: Number(r.acompte_pct),
+  conditionsPaiement: r.conditions_paiement as string, acomptePct: Number(r.acompte_pct), logo: (r.logo as string | null) ?? null,
 });
 const depuisEntreprise = (e: Entreprise) => ({
   nom: e.nom, metier: e.metier, siret: e.siret, adresse: e.adresse, email: e.email, telephone: e.telephone, regime_tva: e.regimeTva, numero_tva: e.numeroTva,
   assurance: e.assurance, validite_jours: e.validiteJours, conditions_paiement: e.conditionsPaiement, acompte_pct: e.acomptePct,
+  // le logo n'est envoyé que s'il a été touché (la colonne n'existe qu'après la migration 0003)
+  ...(e.logo !== undefined ? { logo: e.logo } : {}),
 });
 const versDevis = (r: Ligne): Devis => ({
   id: r.id as string, numero: r.numero as string, titre: r.titre as string, client: r.client as Devis['client'], lignes: r.lignes as Devis['lignes'],
