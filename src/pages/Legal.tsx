@@ -12,7 +12,7 @@ function Mentions() {
   return <>
     <h1 className="titre-page">Mentions légales</h1>
     <Titre>Éditeur</Titre>
-    <p>{EDITEUR.nom}, {v(EDITEUR.statut)}<br />Adresse : {v(EDITEUR.adresse)}<br />SIRET : {v(EDITEUR.siret)}<br />Contact : {v(EDITEUR.email)}<br />Directeur de la publication : {EDITEUR.nom}</p>
+    <p>{EDITEUR.nom}, {v(EDITEUR.statut)}<br />Adresse : {v(EDITEUR.adresse)}<br />{EDITEUR.siret ? `SIRET : ${EDITEUR.siret}` : `SIREN : ${EDITEUR.siren}`}<br />Contact : {v(EDITEUR.email)}<br />Directeur de la publication : {EDITEUR.nom}</p>
     <Titre>Hébergement</Titre>
     <p>Site et fonctions serveur : Vercel Inc., 440 N Barranca Ave #4133, Covina, CA 91723, États-Unis.<br />Base de données et comptes : Supabase Inc., données hébergées dans la région {EDITEUR.regionDonnees}.</p>
     <Titre>Propriété intellectuelle</Titre>

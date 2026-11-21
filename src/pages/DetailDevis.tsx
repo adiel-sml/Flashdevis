@@ -3,10 +3,10 @@ import { useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Feuille } from '../components/Elements';
 import { IcCoche, IcCorbeille, IcCrayon, IcEuro, IcHorloge, IcLien, IcPdf, IcRetour, IcSuite } from '../components/Icones';
-import { acompte, euros, totalLigne, totaux } from '../lib/calcul';
-import { envoyerDevis, lienSignature, relancerDevis, relancerFacture } from '../lib/messages';
+import { euros, partAcompte, totalLigne, totaux } from '../lib/calcul';
+import { envoyerDevis, lienSignature, relancerAcompte, relancerDevis, relancerFacture } from '../lib/messages';
 import { pdfDocument } from '../lib/pdf';
-import { enregistrerDevis, facturerDevis, supprimerDevis, useEtat } from '../lib/store';
+import { enregistrerDevis, facturerAcompte, facturerDevis, supprimerDevis, useEtat } from '../lib/store';
 import { dateEnvoi, etape, jours, RELANCE_DEVIS_J, RELANCE_FACTURE_J } from '../lib/suivi';
 import type { Devis } from '../lib/types';
 
@@ -42,7 +42,13 @@ function Encart({ d }: { d: Devis }) {
     titre = j === 0 ? 'Envoyé aujourd’hui' : j >= RELANCE_DEVIS_J ? `Pas de réponse depuis ${j} jours` : `Envoyé il y a ${j} jour${j > 1 ? 's' : ''}`;
     texte = d.ouvertures ? `Le lien a été ouvert ${d.ouvertures} fois, la dernière le ${date(d.ouvertLe)}.` : 'Le client n’a pas encore ouvert le lien.';
   }
-  if (e === 'signe') { ton = 'bg-ok-pale'; titre = d.signature ? `Signé par ${d.signature.nom} le ${date(d.signature.date)}` : 'Marqué comme signé'; texte = 'Vous pouvez faire les travaux, puis le transformer en facture en un geste.'; }
+  if (e === 'signe') {
+    ton = 'bg-ok-pale'; titre = d.signature ? `Signé par ${d.signature.nom} le ${date(d.signature.date)}` : 'Marqué comme signé';
+    texte = !d.acompte ? 'Facturez l’acompte, faites les travaux, puis facturez le solde en un geste.'
+      : d.acompte.payee ? `Acompte ${d.acompte.numero} payé. Une fois les travaux faits, facturez le solde.`
+      : `Acompte ${d.acompte.numero} facturé le ${date(d.acompte.date)}, en attente de paiement.`;
+    if (d.acompte && !d.acompte.payee && jours(d.acompte.date) >= RELANCE_DEVIS_J) ton = 'bg-alerte-pale';
+  }
   if (e === 'facture') { const j = jours(d.facture!.date); ton = j >= RELANCE_FACTURE_J ? 'bg-alerte-pale' : 'bg-flash-100'; titre = `Facture ${d.facture!.numero} · ${j >= RELANCE_FACTURE_J ? `impayée depuis ${j} jours` : `émise le ${date(d.facture!.date)}`}`; texte = 'Marquez-la payée dès réception du virement.'; }
   if (e === 'payee') { ton = 'bg-ok-pale'; titre = `Payée${d.payeeLe ? ` le ${date(d.payeeLe)}` : ''}`; texte = `Facture ${d.facture!.numero} réglée. Chantier bouclé.`; }
   if (e === 'refuse') { titre = 'Refusé par le client'; texte = 'Vous pouvez l’ajuster et le renvoyer.'; }
@@ -66,16 +72,23 @@ export default function DetailDevis() {
     try { await f(); } catch { setInfo('L’opération n’a pas pu être enregistrée. Vérifiez votre connexion.'); } finally { setOccupe(false); }
   };
   const maj = (patch: Partial<Devis>) => enregistrerDevis({ ...d, ...patch });
-  const pdf = (mode: 'devis' | 'facture') => faire(async () => pdfDocument(d, entreprise, mode).save(`${mode === 'facture' ? d.facture!.numero : d.numero}.pdf`));
+  const pdf = (mode: 'devis' | 'facture' | 'acompte') => faire(async () => pdfDocument(d, entreprise, mode).save(`${mode === 'facture' ? d.facture!.numero : mode === 'acompte' ? d.acompte!.numero : d.numero}.pdf`));
   const envoyer = faire(async () => { if (await envoyerDevis(d, entreprise)) if (d.statut === 'brouillon' || d.statut === 'refuse') await maj({ statut: 'envoye' }); });
   const copier = faire(async () => { await navigator.clipboard.writeText(lienSignature(d)); setInfo('Lien de signature copié.'); });
 
   // La prochaine étape, en grand
   const impayeLongtemps = e === 'facture' && jours(d.facture!.date) >= RELANCE_FACTURE_J;
+  const pct = entreprise.acomptePct, partDevis = partAcompte(t, d.acompte?.pct ?? pct);
+  const acompteDu = d.acompte && !d.acompte.payee, acompteEnRetard = acompteDu && jours(d.acompte!.date) >= RELANCE_DEVIS_J;
+  const payerAcompte = faire(() => maj({ acompte: { ...d.acompte!, payee: true } }));
+  const facturerSolde: [string, () => void] = [d.acompte ? `Facturer le solde (${euros(t.ttc - partDevis.ttc)})` : 'Transformer en facture', faire(() => facturerDevis(d))];
   const principal: [string, () => void] =
     e === 'brouillon' ? [`Envoyer à ${prenom(d)}`, envoyer]
     : e === 'envoye' ? [`Relancer ${prenom(d)}`, faire(() => relancerDevis(d, entreprise))]
-    : e === 'signe' ? ['Transformer en facture', faire(() => facturerDevis(d))]
+    : e === 'signe' && !d.acompte && pct > 0 ? [`Facturer l’acompte (${euros(partDevis.ttc)})`, faire(() => facturerAcompte(d, pct))]
+    : e === 'signe' && acompteEnRetard ? [`Relancer pour l’acompte`, faire(() => relancerAcompte(d, entreprise))]
+    : e === 'signe' && acompteDu ? ['Marquer l’acompte payé', payerAcompte]
+    : e === 'signe' ? facturerSolde
     : impayeLongtemps ? [`Relancer ${prenom(d)}`, faire(() => relancerFacture(d, entreprise))]
     : e === 'facture' ? ['Marquer comme payée', faire(() => maj({ facture: { ...d.facture!, payee: true } }))]
     : e === 'payee' ? ['PDF de la facture', pdf('facture')]
@@ -83,13 +96,17 @@ export default function DetailDevis() {
 
   const secondaires: [typeof IcPdf, string, () => void, boolean?][] = [
     [IcPdf, 'PDF du devis', pdf('devis')],
+    ...(d.acompte ? [[IcPdf, 'PDF de la facture d’acompte', pdf('acompte')] as [typeof IcPdf, string, () => void]] : []),
+    ...(acompteDu && (acompteEnRetard || e !== 'signe') ? [[IcEuro, 'Marquer l’acompte payé', payerAcompte] as [typeof IcPdf, string, () => void]] : []),
+    ...(e === 'signe' && d.acompte && !d.acompte.payee ? [[IcPdf, facturerSolde[0], facturerSolde[1]] as [typeof IcPdf, string, () => void]] : []),
+    ...(e === 'signe' && !d.acompte && pct > 0 ? [[IcPdf, 'Facturer directement le total', faire(() => facturerDevis(d))] as [typeof IcPdf, string, () => void]] : []),
     ...(d.facture && e !== 'payee' ? [[IcPdf, 'PDF de la facture', pdf('facture')] as [typeof IcPdf, string, () => void]] : []),
     ...(!d.facture && e !== 'brouillon' ? [[IcLien, 'Copier le lien de signature', copier] as [typeof IcPdf, string, () => void]] : []),
     ...(e === 'envoye' ? [[IcCoche, 'Marquer comme signé', faire(() => maj({ statut: 'signe' }))] as [typeof IcPdf, string, () => void], [IcCorbeille, 'Marquer comme refusé', faire(() => maj({ statut: 'refuse' }))] as [typeof IcPdf, string, () => void]] : []),
     ...(e === 'envoye' || e === 'refuse' ? [[IcLien, 'Renvoyer le devis', envoyer] as [typeof IcPdf, string, () => void]] : []),
     ...(impayeLongtemps ? [[IcEuro, 'Marquer comme payée', faire(() => maj({ facture: { ...d.facture!, payee: true } }))] as [typeof IcPdf, string, () => void]] : []),
-    ...(!d.facture && e !== 'refuse' ? [[IcCrayon, 'Modifier', () => nav(`/app/devis/${d.id}/modifier`)] as [typeof IcPdf, string, () => void]] : []),
-    ...(!d.facture ? [[IcCorbeille, 'Supprimer le devis', () => { if (confirm('Supprimer ce devis ?')) faire(async () => { await supprimerDevis(d.id); nav('/app/devis', { replace: true }); })(); }, true] as [typeof IcPdf, string, () => void, boolean]] : []),
+    ...(!d.facture && !d.acompte && e !== 'refuse' ? [[IcCrayon, 'Modifier', () => nav(`/app/devis/${d.id}/modifier`)] as [typeof IcPdf, string, () => void]] : []),
+    ...(!d.facture && !d.acompte ? [[IcCorbeille, 'Supprimer le devis', () => { if (confirm('Supprimer ce devis ?')) faire(async () => { await supprimerDevis(d.id); nav('/app/devis', { replace: true }); })(); }, true] as [typeof IcPdf, string, () => void, boolean]] : []),
   ];
 
   return (
@@ -113,7 +130,9 @@ export default function DetailDevis() {
           {t.tva.map(v => <div key={v.taux} className="flex justify-between"><span>TVA {String(v.taux).replace('.', ',')} %</span><span>{euros(v.montant)}</span></div>)}
         </div>}
         <div className="flex justify-between py-3 text-[17px] font-extrabold"><span>{entreprise.regimeTva === 'franchise' ? 'Total' : 'Total TTC'}</span><span>{euros(t.ttc)}</span></div>
-        {entreprise.acomptePct > 0 && !d.facture && <div className="-mt-2 flex justify-between pb-3 text-[13px] text-gris"><span>Acompte {entreprise.acomptePct} %</span><span>{euros(acompte(t.ttc, entreprise.acomptePct))}</span></div>}
+        {d.acompte ? <div className="-mt-2 flex justify-between pb-1 text-[13px] text-gris"><span>Acompte {d.acompte.numero} ({d.acompte.pct} %) · {d.acompte.payee ? 'payé' : 'à encaisser'}</span><span>{euros(partDevis.ttc)}</span></div>
+          : pct > 0 && !d.facture && <div className="-mt-2 flex justify-between pb-3 text-[13px] text-gris"><span>Acompte {pct} %</span><span>{euros(partDevis.ttc)}</span></div>}
+        {d.acompte && <div className="flex justify-between pb-3 text-[13px] font-semibold"><span>{d.facture ? 'Reste à payer' : 'Solde à facturer'}</span><span>{euros(t.ttc - partDevis.ttc)}</span></div>}
       </section>
       {d.remarques && <p className="mt-3 whitespace-pre-line rounded-[14px] bg-white px-3.5 py-3 text-[13px] text-encre-600">{d.remarques}</p>}
       {info && <p role="status" className="mt-3 text-center text-sm text-encre-600">{info}</p>}

@@ -55,6 +55,7 @@ export interface Devis {
   statut: StatutDevis;
   signature?: { nom: string; date: string; image: string };
   facture?: { numero: string; date: string; payee: boolean };
+  acompte?: { numero: string; date: string; pct: number; payee: boolean; payeeLe?: string | null }; // facture d'acompte, émise sur le devis signé
   jeton?: string; // lien secret de signature (attribué par la base)
   envoyeLe?: string; // date du premier envoi au client
   payeeLe?: string; // date de paiement de la facture

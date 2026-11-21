@@ -49,6 +49,7 @@ const versDevis = (r: Ligne): Devis => ({
   id: r.id as string, numero: r.numero as string, titre: r.titre as string, client: r.client as Devis['client'], lignes: r.lignes as Devis['lignes'],
   remarques: r.remarques as string, dateCreation: r.cree_le as string, statut: r.statut as Devis['statut'], jeton: r.jeton_signature as string,
   signature: (r.signature as Devis['signature']) ?? undefined, facture: (r.facture as Devis['facture']) ?? undefined,
+  acompte: r.acompte ? (({ payee_le, ...x }) => ({ ...x, payeeLe: payee_le }))(r.acompte as Devis['acompte'] & { payee_le?: string | null }) : undefined,
   envoyeLe: (r.envoye_le as string) ?? undefined, payeeLe: (r.payee_le as string) ?? undefined, ouvertures: Number(r.ouvertures ?? 0), ouvertLe: (r.ouvert_le as string) ?? undefined,
 });
 const versTarif = (r: Ligne): Tarif => ({ id: r.id as string, designation: r.designation as string, unite: r.unite as string, prixHt: Number(r.prix_ht) });
@@ -90,23 +91,35 @@ export async function enregistrerDevis(d: Devis): Promise<Devis> {
   const existe = etat.devis.some(x => x.id === d.id);
   let final = d;
   if (supabase) {
-    const champs = { titre: d.titre, client: d.client, lignes: d.lignes, remarques: d.remarques, statut: d.statut, ...(d.facture ? { facture: d.facture } : {}) };
+    const champs = { titre: d.titre, client: d.client, lignes: d.lignes, remarques: d.remarques, statut: d.statut, ...(d.facture ? { facture: d.facture } : {}), ...(d.acompte ? { acompte: d.acompte } : {}) };
     const r = existe ? await supabase.from('devis').update(champs).eq('id', d.id).select().single() : await supabase.from('devis').insert({ id: d.id, ...champs }).select().single();
     final = versDevis(verifier(r) as Ligne);
   } else {
     // mode démo : les dates de suivi sont posées ici (avec Supabase, c'est la base qui s'en charge)
     const avant = etat.devis.find(x => x.id === d.id), maintenant = new Date().toISOString();
-    final = { ...d, envoyeLe: avant?.envoyeLe ?? (d.statut === 'envoye' ? maintenant : undefined), payeeLe: d.facture?.payee ? (avant?.payeeLe ?? maintenant) : undefined };
+    final = { ...d, envoyeLe: avant?.envoyeLe ?? (d.statut === 'envoye' ? maintenant : undefined), payeeLe: d.facture?.payee ? (avant?.payeeLe ?? maintenant) : undefined,
+      acompte: d.acompte && { ...d.acompte, payeeLe: d.acompte.payee ? (avant?.acompte?.payeeLe ?? maintenant) : null } };
     if (!existe) final = { ...final, numero: prochainNumero('D', new Date().getFullYear(), etat.devis.map(x => x.numero)), jeton: d.id };
   }
   publier({ ...etat, devis: existe ? etat.devis.map(x => (x.id === final.id ? final : x)) : [final, ...etat.devis] });
   return final;
 }
 
+// Factures et factures d'acompte partagent la même suite de numéros
+const numerosFactures = () => etat.devis.flatMap(x => [x.facture?.numero, x.acompte?.numero].filter((n): n is string => !!n));
+
+export async function facturerAcompte(d: Devis, pct: number): Promise<Devis> {
+  let final: Devis;
+  if (supabase) final = versDevis(verifier(await supabase.rpc('facturer_acompte', { p_devis: d.id, p_pct: pct })) as Ligne);
+  else final = { ...d, acompte: { numero: prochainNumero('F', new Date().getFullYear(), numerosFactures()), date: new Date().toISOString(), pct, payee: false, payeeLe: null } };
+  publier({ ...etat, devis: etat.devis.map(x => (x.id === final.id ? final : x)) });
+  return final;
+}
+
 export async function facturerDevis(d: Devis): Promise<Devis> {
   let final: Devis;
   if (supabase) final = versDevis(verifier(await supabase.rpc('facturer_devis', { p_devis: d.id })) as Ligne);
-  else final = { ...d, statut: 'facture', facture: { numero: prochainNumero('F', new Date().getFullYear(), etat.devis.flatMap(x => (x.facture ? [x.facture.numero] : []))), date: new Date().toISOString(), payee: false } };
+  else final = { ...d, statut: 'facture', facture: { numero: prochainNumero('F', new Date().getFullYear(), numerosFactures()), date: new Date().toISOString(), payee: false } };
   publier({ ...etat, devis: etat.devis.map(x => (x.id === final.id ? final : x)) });
   return final;
 }

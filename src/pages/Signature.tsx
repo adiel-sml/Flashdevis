@@ -60,6 +60,8 @@ export default function Signature() {
         const { data, error } = await supabase.rpc('signer_devis', { p_jeton: jeton, p_nom: nom.trim(), p_image: image });
         if (error) throw error;
         if (!data) { setErreur('Ce devis ne peut plus être signé. Contactez votre artisan.'); return; }
+        // prévient l'artisan par e-mail ; un échec ne doit pas gêner le client
+        fetch('/api/notifier-signature', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jeton }) }).catch(() => undefined);
       } else {
         const d = getEtat().devis.find(x => (x.jeton ?? x.id) === jeton)!;
         await enregistrerDevis({ ...d, statut: 'signe', signature: { nom: nom.trim(), date: new Date().toISOString(), image } });

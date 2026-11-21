@@ -27,6 +27,18 @@ export function totaux(lignes: Ligne[], regime: RegimeTva): Totaux {
 
 export const acompte = (ttc: number, pct: number) => arrondi((ttc * pct) / 100);
 
+// Part d'acompte : chaque taux de TVA au prorata (facture d'acompte), et solde restant (facture finale, acompte déduit)
+export function partAcompte(t: Totaux, pct: number): Totaux {
+  const k = (n: number) => arrondi((n * pct) / 100);
+  const tva = t.tva.map(v => ({ taux: v.taux, base: k(v.base), montant: k(v.montant) }));
+  const ht = k(t.ht), totalTva = arrondi(tva.reduce((s, v) => s + v.montant, 0));
+  return { ht, tva, totalTva, ttc: arrondi(ht + totalTva) };
+}
+export function solde(t: Totaux, part: Totaux): Totaux {
+  const tva = t.tva.map(v => { const p = part.tva.find(x => x.taux === v.taux); return { taux: v.taux, base: arrondi(v.base - (p?.base ?? 0)), montant: arrondi(v.montant - (p?.montant ?? 0)) }; });
+  return { ht: arrondi(t.ht - part.ht), tva, totalTva: arrondi(t.totalTva - part.totalTva), ttc: arrondi(t.ttc - part.ttc) };
+}
+
 export const euros = (n: number) =>
   new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
 

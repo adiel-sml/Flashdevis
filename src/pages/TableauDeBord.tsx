@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Avatar, eurosRond } from '../components/Elements';
 import { IcCoche, IcEnvoi, IcHorloge, IcMicro } from '../components/Icones';
-import { envoyerDevis, relancerDevis, relancerFacture } from '../lib/messages';
+import { envoyerDevis, relancerAcompte, relancerDevis, relancerFacture } from '../lib/messages';
 import { enregistrerDevis, facturerDevis, useEtat } from '../lib/store';
 import { actions, enJeu, signature, signeParMois, type Action } from '../lib/suivi';
 
 const ICONE: Record<Action['type'], { Ic: typeof IcHorloge; fond: string }> = {
   'relancer-facture': { Ic: IcHorloge, fond: 'bg-alerte-pale text-alerte' },
+  'relancer-acompte': { Ic: IcHorloge, fond: 'bg-alerte-pale text-alerte' },
   'relancer-devis': { Ic: IcEnvoi, fond: 'bg-info-pale text-info' },
   facturer: { Ic: IcCoche, fond: 'bg-ok-pale text-ok' },
   envoyer: { Ic: IcEnvoi, fond: 'bg-creme text-encre-600' },
@@ -33,6 +34,7 @@ export default function TableauDeBord() {
     setErreur('');
     try {
       if (a.type === 'relancer-facture') await relancerFacture(a.devis, entreprise);
+      else if (a.type === 'relancer-acompte') await relancerAcompte(a.devis, entreprise);
       else if (a.type === 'relancer-devis') await relancerDevis(a.devis, entreprise);
       else if (a.type === 'facturer') { await facturerDevis(a.devis); nav(`/app/devis/${a.devis.id}`); }
       else if (await envoyerDevis(a.devis, entreprise)) await enregistrerDevis({ ...a.devis, statut: 'envoye' });

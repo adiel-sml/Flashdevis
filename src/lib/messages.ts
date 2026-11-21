@@ -1,6 +1,6 @@
 // Messages au client (envoi, relances) : partage du téléphone si disponible, sinon e-mail
 import { euros } from './calcul';
-import { ttc } from './suivi';
+import { ttc, ttcAcompte } from './suivi';
 import type { Devis, Entreprise } from './types';
 
 export const lienSignature = (d: Devis) => `${location.origin}/s/${d.jeton ?? d.id}`;
@@ -20,3 +20,6 @@ export const relancerDevis = (d: Devis, e: Entreprise) =>
 
 export const relancerFacture = (d: Devis, e: Entreprise) =>
   partager(d, `Rappel : facture ${d.facture!.numero}`, `${bonjour(d)}\n\nSauf erreur de ma part, la facture ${d.facture!.numero} de ${euros(ttc(d, e.regimeTva))} reste à régler. Pourriez-vous procéder au paiement dès que possible ?\n\nMerci d’avance,\n${e.nom}`);
+
+export const relancerAcompte = (d: Devis, e: Entreprise) =>
+  partager(d, `Rappel : acompte ${d.acompte!.numero}`, `${bonjour(d)}\n\nPour lancer les travaux « ${d.titre} », je reste dans l’attente du règlement de l’acompte (facture ${d.acompte!.numero}, ${euros(ttcAcompte(d, e.regimeTva))}).\n\nMerci d’avance,\n${e.nom}`);

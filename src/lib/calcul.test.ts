@@ -27,3 +27,14 @@ describe('prochainNumero', () => {
     expect(prochainNumero('F', 2027, ['F-2026-0003'])).toBe('F-2027-0001');
   });
 });
+
+describe('acompte', () => {
+  it('part au prorata de chaque taux, et solde qui retombe exactement sur le total', async () => {
+    const { partAcompte, solde, totaux } = await import('./calcul');
+    const t = totaux([{ id: 'a', designation: 'x', quantite: 3, unite: 'u', prixUnitaireHt: 33.33, tauxTva: 10, estimation: false }, { id: 'b', designation: 'y', quantite: 1, unite: 'u', prixUnitaireHt: 101, tauxTva: 20, estimation: false }], 'normal');
+    const p = partAcompte(t, 30), s = solde(t, p);
+    expect(p.ht).toBe(60.3); expect(p.tva.map(v => v.montant)).toEqual([6.06, 3]);
+    expect(Math.round((p.ttc + s.ttc) * 100)).toBe(Math.round(t.ttc * 100));
+    expect(Math.round((p.ht + s.ht) * 100)).toBe(Math.round(t.ht * 100));
+  });
+});

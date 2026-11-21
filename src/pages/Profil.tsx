@@ -4,6 +4,8 @@ import { Avatar, EnTete, Feuille } from '../components/Elements';
 import { IcBatiment, IcBouclier, IcCarte, IcChevron, IcCorbeille, IcListe, IcPlus, IcRetour } from '../components/Icones';
 import { allerVersStripe, attendrePro } from '../lib/abonnement';
 import { reduireLogo, telecharger } from '../lib/image';
+import { csv, lignesComptables } from '../lib/export';
+import { euros } from '../lib/calcul';
 import { supprimerCompte } from '../lib/compte';
 import { enregistrerEntreprise, enregistrerTarifs, getEtat, id, useEtat } from '../lib/store';
 import { conformite, devisDuMois, QUOTA_GRATUIT } from '../lib/suivi';
@@ -53,6 +55,7 @@ export default function Profil() {
         <Item to="/app/profil/tarifs" Ic={IcListe} lib="Mes tarifs" valeur={`${tarifs.length} prix`} />
         <Item to="/app/profil/tva" Ic={IcBouclier} lib="TVA et assurance" valeur={e.regimeTva === 'franchise' ? 'Franchise' : 'Assujetti'} />
         <Item to="/app/profil/paiement" Ic={IcCarte} lib="Paiement et acompte" valeur={`${e.acomptePct} %`} />
+        <Item to="/app/profil/comptable" Ic={IcListe} lib="Export comptable" valeur="CSV" />
       </div>
       <div className="mt-3.5 flex items-center justify-between gap-3 rounded-[18px] bg-encre-900 p-4 text-white">
         {plan === 'pro' ? <>
@@ -167,6 +170,33 @@ function ChoixLogo({ logo, changer }: { logo?: string | null; changer: (l: strin
   );
 }
 
+// Export pour le comptable : factures et factures d'acompte de la période, en CSV
+function ExportComptable() {
+  const { devis, entreprise } = useEtat();
+  const annees = [...new Set([new Date().getFullYear(), ...devis.flatMap(d => [d.facture?.date, d.acompte?.date].filter((x): x is string => !!x).map(x => new Date(x).getFullYear()))])].sort((a, b) => b - a);
+  const [annee, setAnnee] = useState(annees[0]);
+  const [mois, setMois] = useState<number | undefined>(undefined);
+  const lignes = lignesComptables(devis, entreprise.regimeTva, { annee, mois });
+  const somme = (k: 'ht' | 'tva' | 'ttc') => lignes.reduce((s, l) => s + l[k], 0);
+  const NOMS = Array.from({ length: 12 }, (_, i) => new Date(2026, i, 1).toLocaleDateString('fr-FR', { month: 'short' }));
+  const nom = `factures-${annee}${mois ? `-${String(mois).padStart(2, '0')}` : ''}.csv`;
+  return (
+    <Rubrique titre="Export comptable" pied={<button onClick={() => telecharger(nom, csv(lignes), 'text/csv;charset=utf-8')} disabled={!lignes.length} className="btn-primaire w-full py-3.5 text-base">Télécharger le fichier ({lignes.length} facture{lignes.length > 1 ? 's' : ''})</button>}>
+      <p className="text-[13px] text-gris">Un fichier à envoyer à votre comptable : chaque facture et facture d’acompte, avec les montants HT, TVA et TTC et le paiement. Il s’ouvre dans Excel.</p>
+      <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]">{annees.map(a => <button key={a} onClick={() => setAnnee(a)} className={`shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-semibold ${a === annee ? 'border-encre-900 bg-encre-900 text-white' : 'border-trait bg-white'}`}>{a}</button>)}</div>
+      <div className="grid grid-cols-4 gap-1.5">
+        <button onClick={() => setMois(undefined)} className={`col-span-4 rounded-xl border py-2 text-sm font-semibold ${mois === undefined ? 'border-encre-900 bg-encre-900 text-white' : 'border-trait bg-white'}`}>Toute l’année</button>
+        {NOMS.map((n, i) => <button key={n} onClick={() => setMois(i + 1)} className={`rounded-xl border py-2 text-sm font-semibold capitalize ${mois === i + 1 ? 'border-encre-900 bg-encre-900 text-white' : 'border-trait bg-white'}`}>{n.replace('.', '')}</button>)}
+      </div>
+      <div className="carte grid grid-cols-3 gap-2 text-center">
+        <div><p className="lab">HT</p><p className="mt-1 font-extrabold">{euros(somme('ht'))}</p></div>
+        <div><p className="lab">TVA</p><p className="mt-1 font-extrabold">{euros(somme('tva'))}</p></div>
+        <div><p className="lab">TTC</p><p className="mt-1 font-extrabold">{euros(somme('ttc'))}</p></div>
+      </div>
+    </Rubrique>
+  );
+}
+
 // Droits RGPD : récupérer toutes ses données, supprimer son compte
 function MesDonnees() {
   const [confirmer, setConfirmer] = useState(false);
@@ -218,6 +248,7 @@ export function RubriqueProfil() {
   const { section } = useParams();
   if (section === 'tarifs') return <FormTarifs />;
   if (section === 'donnees') return <MesDonnees />;
+  if (section === 'comptable') return <ExportComptable />;
   if (section === 'entreprise' || section === 'tva' || section === 'paiement') return <FormEntreprise key={section} section={section} />;
   return <Navigate to="/app/profil" replace />;
 }

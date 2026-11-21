@@ -69,6 +69,7 @@ En local, la génération demande la fonction serveur : lancez `vercel dev` avec
 2. **SQL Editor**, coller le contenu de `supabase/migrations/0001_schema.sql`, puis **Run**.
    Puis, de la même façon, `supabase/migrations/0002_suivi.sql` (dates d'envoi et de paiement, ouvertures du lien de signature, utilisées par le tableau de bord).
    Puis `supabase/migrations/0003_lancement.sql` (logo de l'artisan, limite de rédactions par l'assistant tenue par la base).
+   Puis `supabase/migrations/0004_acompte_notification.sql` (facture d'acompte, e-mail à l'artisan quand son client signe).
 3. **Authentication**, puis **URL Configuration** : mettre l'adresse du site Vercel dans **Site URL** et ajouter `https://<votre-site>/app` dans **Redirect URLs**.
 4. **Project Settings**, puis **API** : copier **Project URL** et la clé **anon public**.
 5. Dans Vercel, ajouter `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY`, puis redéployer. La clé anon est publique par conception : la sécurité repose sur les règles de la base. Ne jamais mettre la clé `service_role` dans l'appli.
@@ -87,6 +88,10 @@ Tester les règles en local, sur une base PostgreSQL 16 vide : `psql -f supabase
 ## E-mails de connexion par Brevo
 
 Le service d'envoi intégré à Supabase est limité à quelques e-mails par heure. Dans Supabase, **Authentication**, puis **Emails** et **SMTP Settings** : activer le SMTP personnalisé avec `smtp-relay.brevo.com`, port `587`, l'identifiant SMTP de Brevo et une clé SMTP (Brevo, **SMTP et API**). L'adresse d'expéditeur doit être validée dans Brevo (**Expéditeurs, domaines et IP dédiées**). Relever ensuite la limite d'envoi dans **Authentication**, **Rate Limits**.
+
+## E-mail « votre client a signé »
+
+Dans Vercel, ajouter `BREVO_API_KEY` (Brevo, **SMTP et API**, onglet **Clés API**, en **Secret**) et `BREVO_EXPEDITEUR` (l'adresse d'expéditeur validée dans Brevo, en **Config**). Sans elles, la signature fonctionne, simplement sans e-mail.
 
 ## Mentions légales
 

@@ -1,7 +1,7 @@
 // Génère le PDF d'un devis ou d'une facture, avec les mentions obligatoires en France.
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { acompte, euros as eurosEcran, totalLigne, totaux } from './calcul';
+import { euros as eurosEcran, partAcompte, solde, totalLigne, totaux } from './calcul';
 import type { Devis, Entreprise } from './types';
 
 // jsPDF (Helvetica) n'a pas l'espace fine insécable du format français : remplacée par une espace simple
@@ -9,10 +9,12 @@ const euros = (n: number) => eurosEcran(n).replace(/[\u202f\u00a0]/g, ' ');
 const date = (iso: string) => new Date(iso).toLocaleDateString('fr-FR');
 const plusJours = (iso: string, j: number) => new Date(new Date(iso).getTime() + j * 86400000).toISOString();
 
-export function pdfDocument(d: Devis, e: Entreprise, mode: 'devis' | 'facture'): jsPDF {
+export function pdfDocument(d: Devis, e: Entreprise, mode: 'devis' | 'facture' | 'acompte'): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  const facture = mode === 'facture' && d.facture;
-  const t = totaux(d.lignes, e.regimeTva);
+  const ac = mode === 'acompte' ? d.acompte : undefined;          // facture d'acompte
+  const facture = (mode === 'facture' && !!d.facture) || !!ac;     // tout document qui est une facture (mentions, pas de signature)
+  const tDevis = totaux(d.lignes, e.regimeTva);
+  const t = ac ? partAcompte(tDevis, ac.pct) : tDevis;
   const encre: [number, number, number] = [17, 24, 39], flash: [number, number, number] = [245, 168, 0];
 
   // En-tête : entreprise à gauche, document à droite
@@ -30,9 +32,11 @@ export function pdfDocument(d: Devis, e: Entreprise, mode: 'devis' | 'facture'):
   const ident = [e.metier, e.adresse, [e.telephone, e.email].filter(Boolean).join(' · '), e.siret && `SIRET : ${e.siret}`, e.regimeTva === 'normal' && e.numeroTva && `TVA intracommunautaire : ${e.numeroTva}`].filter(Boolean) as string[];
   doc.text(ident.flatMap(l => doc.splitTextToSize(l, 95)), 15, yNom + 6);
 
-  doc.setTextColor(...encre).setFont('helvetica', 'bold').setFontSize(20).text(facture ? 'FACTURE' : 'DEVIS', 195, 18, { align: 'right' });
+  doc.setTextColor(...encre).setFont('helvetica', 'bold').setFontSize(20).text(ac ? 'FACTURE D’ACOMPTE' : facture ? 'FACTURE' : 'DEVIS', 195, 18, { align: 'right' });
   doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(70);
-  const meta = facture
+  const meta = ac
+    ? [`N° ${ac.numero}`, `Date : ${date(ac.date)}`, 'Payable à réception', `Devis d’origine : ${d.numero}`]
+    : facture
     ? [`N° ${d.facture!.numero}`, `Date : ${date(d.facture!.date)}`, `Échéance : ${date(plusJours(d.facture!.date, 30))}`, `Devis d’origine : ${d.numero}`]
     : [`N° ${d.numero}`, `Date : ${date(d.dateCreation)}`, `Valable jusqu’au ${date(plusJours(d.dateCreation, e.validiteJours))}`];
   doc.text(meta, 195, 24, { align: 'right' });
@@ -50,7 +54,10 @@ export function pdfDocument(d: Devis, e: Entreprise, mode: 'devis' | 'facture'):
   autoTable(doc, {
     startY: 89,
     head: [['Désignation', 'Qté', 'Unité', 'PU HT', ...(franchise ? [] : ['TVA']), 'Total HT']],
-    body: d.lignes.map(l => [l.designation, String(l.quantite).replace('.', ','), l.unite, euros(l.prixUnitaireHt), ...(franchise ? [] : [`${String(l.tauxTva).replace('.', ',')} %`]), euros(totalLigne(l))]),
+    body: ac
+      // acompte : une ligne par taux de TVA, au prorata du devis signé
+      ? (franchise || t.tva.length === 0 ? [{ taux: 0, base: t.ht }] : t.tva).map(v => [`Acompte de ${String(ac.pct).replace('.', ',')} % sur le devis ${d.numero}${t.tva.length > 1 ? ` (part à ${String(v.taux).replace('.', ',')} %)` : ''}`, '1', 'forfait', euros(v.base), ...(franchise ? [] : [`${String(v.taux).replace('.', ',')} %`]), euros(v.base)])
+      : d.lignes.map(l => [l.designation, String(l.quantite).replace('.', ','), l.unite, euros(l.prixUnitaireHt), ...(franchise ? [] : [`${String(l.tauxTva).replace('.', ',')} %`]), euros(totalLigne(l))]),
     styles: { font: 'helvetica', fontSize: 9, cellPadding: 2.5, textColor: encre },
     headStyles: { fillColor: encre, textColor: 255, fontStyle: 'bold' },
     columnStyles: { 0: { cellWidth: franchise ? 90 : 78 }, 1: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' } },
@@ -66,8 +73,14 @@ export function pdfDocument(d: Devis, e: Entreprise, mode: 'devis' | 'facture'):
   };
   ligneTotal('Total HT', euros(t.ht));
   t.tva.forEach(v => ligneTotal(`TVA ${String(v.taux).replace('.', ',')} % sur ${euros(v.base)}`, euros(v.montant)));
-  ligneTotal(franchise ? 'Total à payer' : 'Total TTC', euros(t.ttc), true);
-  if (!facture && e.acomptePct > 0) ligneTotal(`Acompte à la signature (${e.acomptePct} %)`, euros(acompte(t.ttc, e.acomptePct)));
+  if (mode === 'facture' && d.acompte) {
+    // facture finale : l'acompte déjà facturé est déduit
+    const part = partAcompte(tDevis, d.acompte.pct), reste = solde(tDevis, part);
+    ligneTotal(franchise ? 'Total' : 'Total TTC', euros(t.ttc), true);
+    ligneTotal(`Acompte déduit (${d.acompte.numero})`, `- ${euros(part.ttc)}`);
+    ligneTotal('Reste à payer', euros(reste.ttc), true);
+  } else ligneTotal(franchise ? 'Total à payer' : 'Total TTC', euros(t.ttc), true);
+  if (!facture && e.acomptePct > 0) ligneTotal(`Acompte à la signature (${e.acomptePct} %)`, euros(partAcompte(t, e.acomptePct).ttc));
 
   // Mentions
   y += 4;

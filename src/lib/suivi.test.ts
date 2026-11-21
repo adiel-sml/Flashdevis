@@ -47,3 +47,17 @@ describe('suivi', () => {
     expect(c.faits).toBe(4); expect(c.premier?.manque).toBe('l’assurance décennale ou RC pro');
   });
 });
+
+describe('acompte dans le suivi', () => {
+  const sig = { nom: 'x', date: il(10), image: '' };
+  it('statut, argent en jeu et relance d’un acompte impayé', () => {
+    const d = devis({ statut: 'signe', signature: sig, acompte: { numero: 'F-2026-0005', date: il(9), pct: 30, payee: false } });
+    expect(statutAffiche(d, MAINTENANT)).toEqual({ libelle: 'Acompte impayé 9 j', ton: 'rouge' });
+    expect(enJeu([d], 'franchise')).toEqual({ attente: 0, aFacturer: 70, impaye: 30, nb: 1, total: 100 });
+    expect(actions([d], 'franchise', MAINTENANT).map(a => a.type)).toEqual(['relancer-acompte', 'facturer']);
+  });
+  it('facture finale : seul le solde reste dû quand l’acompte est payé', () => {
+    const d = devis({ statut: 'facture', signature: sig, acompte: { numero: 'F-1', date: il(9), pct: 30, payee: true }, facture: { numero: 'F-2', date: il(1), payee: false } });
+    expect(enJeu([d], 'franchise').impaye).toBe(70);
+  });
+});

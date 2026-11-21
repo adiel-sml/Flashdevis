@@ -3,7 +3,8 @@ export const EDITEUR = {
   nom: 'Adiel Sanga',
   statut: 'entrepreneur individuel (micro-entreprise)',
   adresse: '2 rue du Génie, 13003 Marseille',
-  siret: 'immatriculation en cours',
+  siren: '133 059 097',
+  siret: '',          // à renseigner dès son attribution (il remplace alors le SIREN affiché)
   email: 'leolinsanga@gmail.com',   // adresse de contact affichée publiquement
   regionDonnees: 'Union européenne',   // région du projet Supabase
 };
