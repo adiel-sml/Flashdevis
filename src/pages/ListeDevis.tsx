@@ -3,15 +3,19 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Avatar, EnTete, eurosRond, Statut } from '../components/Elements';
 import { IcRecherche } from '../components/Icones';
 import { useEtat } from '../lib/store';
-import { actions, etape, ttc } from '../lib/suivi';
+import { actions, etape, resteDu, ttc } from '../lib/suivi';
 import type { Devis } from '../lib/types';
 
+// Les filtres « payés » n'ont pas de bouton : ils s'ouvrent depuis le tableau de bord
 const FILTRES = [
   { cle: 'tous', lib: 'Tous', garde: () => true },
   { cle: 'relancer', lib: 'À relancer', garde: () => true },
-  { cle: 'brouillons', lib: 'Brouillons', garde: (d: Devis) => etape(d) === 'brouillon' },
+  { cle: 'attente', lib: 'À signer', garde: (d: Devis) => etape(d) === 'envoye' },
   { cle: 'signes', lib: 'Signés', garde: (d: Devis) => etape(d) === 'signe' },
+  { cle: 'impayes', lib: 'Impayés', garde: () => true },
   { cle: 'factures', lib: 'Factures', garde: (d: Devis) => etape(d) === 'facture' || etape(d) === 'payee' },
+  { cle: 'brouillons', lib: 'Brouillons', garde: (d: Devis) => etape(d) === 'brouillon' },
+  { cle: 'payes', lib: 'Payés', garde: (d: Devis) => etape(d) === 'payee', cache: true },
 ] as const;
 const sansAccent = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
@@ -21,7 +25,7 @@ export default function ListeDevis() {
   const filtre = FILTRES.find(f => f.cle === params.get('filtre')) ?? FILTRES[0];
   const [q, setQ] = useState('');
   const aRelancer = useMemo(() => new Set(actions(devis, entreprise.regimeTva).filter(a => a.type.startsWith('relancer')).map(a => a.devis.id)), [devis, entreprise.regimeTva]);
-  const garde = (f: (typeof FILTRES)[number]) => (d: Devis) => (f.cle === 'relancer' ? aRelancer.has(d.id) : f.garde(d));
+  const garde = (f: (typeof FILTRES)[number]) => (d: Devis) => (f.cle === 'relancer' ? aRelancer.has(d.id) : f.cle === 'impayes' ? resteDu(d, entreprise.regimeTva) > 0 : f.garde(d));
 
   const visibles = [...devis].sort((a, b) => b.dateCreation.localeCompare(a.dateCreation)).filter(garde(filtre)).filter(d => !q || sansAccent(`${d.titre} ${d.client.nom} ${d.numero} ${d.facture?.numero ?? ''}`).includes(sansAccent(q)));
   const parMois: [string, Devis[]][] = [];
@@ -37,8 +41,8 @@ export default function ListeDevis() {
         <IcRecherche className="h-[18px] w-[18px]" /><input value={q} onChange={e => setQ(e.target.value)} placeholder="Client, chantier, numéro…" className="w-full bg-transparent text-sm text-encre-900 outline-none placeholder:text-gris" />
       </label>
       <div className="-mx-5 mb-1 mt-3 flex gap-1.5 overflow-x-auto px-5 pb-1 [scrollbar-width:none]">
-        {FILTRES.map(f => { const n = devis.filter(garde(f)).length, on = f === filtre; return (
-          <button key={f.cle} onClick={() => setParams(f.cle === 'tous' ? {} : { filtre: f.cle }, { replace: true })} className={`shrink-0 rounded-full border px-3 py-1.5 text-[13px] font-semibold ${on ? 'border-encre-900 bg-encre-900 text-white' : 'border-trait bg-white'}`}>
+        {FILTRES.filter(f => !('cache' in f) || f === filtre).map(f => { const n = devis.filter(garde(f)).length, on = f === filtre; return (
+          <button key={f.cle} onClick={() => setParams(f.cle === 'tous' ? {} : { filtre: f.cle }, { replace: true })} className={`puce shrink-0 ${on ? 'puce-on' : ''}`}>
             {f.lib}<span className={`ml-1 ${on ? 'text-[#9aa1ad]' : 'text-gris'}`}>{n}</span>
           </button>
         ); })}

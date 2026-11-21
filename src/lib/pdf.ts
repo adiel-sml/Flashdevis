@@ -106,6 +106,5 @@ export function pdfDocument(d: Devis, e: Entreprise, mode: 'devis' | 'facture' |
       doc.setTextColor(...encre).text(`${d.signature.nom}, le ${date(d.signature.date)}`, 119, y + 31);
     }
   }
-  doc.setFontSize(7).setTextColor(150).text('Document réalisé avec FlashDevis', 105, 290, { align: 'center' });
   return doc;
 }

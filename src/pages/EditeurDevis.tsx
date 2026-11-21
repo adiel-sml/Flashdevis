@@ -2,7 +2,9 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Avatar, Feuille } from '../components/Elements';
-import { IcClavier, IcCorbeille, IcFermer, IcMicro, IcPlus, IcRetour } from '../components/Icones';
+import { IcClavier, IcCorbeille, IcFermer, IcMicro, IcPdf, IcPlus, IcRetour } from '../components/Icones';
+import { ChampAdresse } from '../components/Saisie';
+import { importerDocument } from '../lib/importer';
 import { euros, totalLigne, totaux } from '../lib/calcul';
 import { useDictee } from '../lib/dictee';
 import { apprendreTarifs, enregistrerDevis, ErreurQuota, getEtat, id, useEtat } from '../lib/store';
@@ -12,6 +14,7 @@ import type { Client, Devis, Ligne } from '../lib/types';
 
 const ligneVide = (tva: number): Ligne => ({ id: id(), designation: '', quantite: 1, unite: 'u', prixUnitaireHt: 0, tauxTva: tva, estimation: false });
 const TAUX = [20, 10, 5.5, 0];
+const UNITES = ['u', 'h', 'j', 'm²', 'ml', 'm³', 'forfait', 'lot', 'kg'];
 const nombre = (v: string) => { const n = Number(v.replace(',', '.')); return Number.isFinite(n) ? n : 0; };
 const clientVide: Client = { nom: '', adresse: '', email: '', telephone: '' };
 
@@ -25,12 +28,18 @@ export default function EditeurDevis() {
   const { entreprise, tarifs, devis } = useEtat();
   const existant = idDevis ? getEtat().devis.find(d => d.id === idDevis) : undefined;
   const nav = useNavigate();
-  const tvaDefaut = entreprise.regimeTva === 'franchise' ? 0 : 20;
+  // taux de TVA par défaut : celui que l'artisan utilise le plus dans ses devis
+  const tvaDefaut = useMemo(() => {
+    if (entreprise.regimeTva === 'franchise') return 0;
+    const n = new Map<number, number>(); for (const d of devis) for (const l of d.lignes) n.set(l.tauxTva, (n.get(l.tauxTva) ?? 0) + 1);
+    return [...n].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 20;
+  }, [devis, entreprise.regimeTva]);
   const connus = useMemo(() => listeClients(devis, entreprise.regimeTva), [devis, entreprise.regimeTva]);
   const prerempli = connus.find(c => c.cle === params.get('client'));
 
   const [etape, setEtape] = useState<1 | 2>(existant ? 2 : 1);
-  const [clavier, setClavier] = useState(false);
+  const [mode, setMode] = useState<'dicter' | 'ecrire' | 'importer'>('dicter');
+  const clavier = mode === 'ecrire';
   const [choixClient, setChoixClient] = useState(false);
   const [description, setDescription] = useState('');
   const [titre, setTitre] = useState(existant?.titre ?? '');
@@ -65,6 +74,19 @@ export default function EditeurDevis() {
     finally { setChargement(false); }
   }
 
+  async function importer(f: File) {
+    setChargement(true); setErreur('');
+    try {
+      const doc = await importerDocument(f);
+      setTitre(x => x || doc.titre);
+      setClient(c => (c.nom ? c : { nom: doc.client.nom, adresse: doc.client.adresse, email: doc.client.email, telephone: doc.client.telephone }));
+      setLignes(x => [...x, ...doc.lignes.map(l => ({ id: id(), designation: l.designation, quantite: l.quantite, unite: l.unite, prixUnitaireHt: l.prix_unitaire_ht, tauxTva: entreprise.regimeTva === 'franchise' ? 0 : l.taux_tva, estimation: false }))]);
+      setConseils(doc.remarques ?? []);
+      setEtape(2);
+    } catch (e) { setErreur(e instanceof Error ? e.message : 'Le document n’a pas pu être lu.'); }
+    finally { setChargement(false); }
+  }
+
   const maj = (i: number, patch: Partial<Ligne>) => setLignes(ls => ls.map((l, j) => (j === i ? { ...l, ...patch, estimation: 'prixUnitaireHt' in patch ? false : l.estimation } : l)));
 
   async function enregistrer() {
@@ -91,10 +113,15 @@ export default function EditeurDevis() {
     <div className="flex min-h-[calc(100dvh-2rem)] flex-col">
       <div className="mt-1 flex items-center justify-between">
         <button onClick={quitter} aria-label="Fermer" className="-ml-1 p-1"><IcFermer /></button>
-        <span className="text-sm font-semibold text-gris">1 · Dicter</span>
-        <button onClick={() => { dictee.arreter(); setClavier(x => !x); }} className="inline-flex items-center gap-1.5 text-sm font-semibold">{clavier ? <><IcMicro className="h-4 w-4" />Parler</> : <><IcClavier className="h-4 w-4" />Taper</>}</button>
+        <span className="text-sm font-semibold text-gris">Nouveau devis</span>
+        <span className="w-8" />
       </div>
       <Etapes n={1} />
+      <div className="mb-5 grid grid-cols-3 gap-1 rounded-xl bg-creme p-1">
+        {([['dicter', 'Dicter', IcMicro], ['ecrire', 'Écrire', IcClavier], ['importer', 'Importer', IcPdf]] as const).map(([m, lib, Ic]) => (
+          <button key={m} onClick={() => { dictee.arreter(); setMode(m); setErreur(''); }} className={`flex min-h-11 items-center justify-center gap-1.5 rounded-lg text-sm font-bold ${mode === m ? 'bg-white shadow-sm' : 'text-gris'}`}><Ic className="h-4 w-4" />{lib}</button>
+        ))}
+      </div>
 
       <p className="lab mb-2">Pour qui ?</p>
       <button onClick={() => setChoixClient(true)} className="flex items-center gap-2.5 rounded-[14px] border border-trait bg-white px-3 py-2.5 text-left text-sm">
@@ -102,7 +129,14 @@ export default function EditeurDevis() {
           : <><span className="grid h-[30px] w-[30px] place-items-center rounded-[9px] border border-dashed border-gris/50 text-gris"><IcPlus className="h-4 w-4" /></span><span className="text-gris">Choisir ou ajouter un client</span></>}
       </button>
 
-      {clavier ? (
+      {mode === 'importer' ? (
+        <label className={`mt-5 flex min-h-48 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gris/40 bg-white px-6 text-center ${chargement ? 'opacity-60' : ''}`}>
+          <IcPdf className="h-9 w-9 text-encre-600" />
+          <b className="text-base">{chargement ? 'Lecture du document…' : 'Choisir un devis ou une facture'}</b>
+          <span className="text-[13px] text-gris">PDF ou photo. Les lignes et le client sont repris.</span>
+          <input type="file" accept="application/pdf,image/*" className="sr-only" disabled={chargement} onChange={ev => { const f = ev.target.files?.[0]; ev.target.value = ''; if (f) importer(f); }} />
+        </label>
+      ) : clavier ? (
         <textarea autoFocus className="mt-5 min-h-48 w-full resize-none bg-transparent text-[21px] font-semibold leading-snug tracking-tight outline-none placeholder:text-[#b3ad9f]" value={description} onChange={e => setDescription(e.target.value)} maxLength={2000}
           placeholder="Salle de bain 6 m², dépose de l’ancien carrelage, faïence fournie et posée…" />
       ) : (
@@ -111,11 +145,11 @@ export default function EditeurDevis() {
           {!texte && 'Décrivez le chantier comme à un collègue : surfaces, matériaux, fournitures, dépose…'}
         </p>
       )}
-      {evoques.length > 0 && <div className="mt-4 flex flex-wrap gap-1.5">{evoques.map(x => <span key={x.id} className="rounded-[9px] border border-dashed border-[#cfc8ba] bg-white px-2.5 py-1.5 text-[12.5px] font-semibold text-encre-600">{x.designation} · {euros(x.prixHt)}{x.unite !== 'u' && ` / ${x.unite}`}</span>)}</div>}
+      {mode !== 'importer' && evoques.length > 0 && <div className="mt-4 flex flex-wrap gap-1.5">{evoques.map(x => <span key={x.id} className="rounded-[9px] border border-dashed border-[#cfc8ba] bg-white px-2.5 py-1.5 text-[12.5px] font-semibold text-encre-600">{x.designation} · {euros(x.prixHt)}{x.unite !== 'u' && ` / ${x.unite}`}</span>)}</div>}
       {(erreur || dictee.erreur) && <p role="alert" className="mt-4 rounded-xl bg-alerte-pale px-3 py-2 text-sm text-alerte">{erreur || dictee.erreur}</p>}
 
       <div className="mt-auto pt-6 text-center">
-        {!clavier && <>
+        {mode === 'dicter' && <>
           {dictee.ecoute && <div className="mb-3 flex h-14 items-center justify-center gap-1" aria-hidden>{[14, 30, 46, 22, 54, 34, 18, 40, 26, 50, 20, 36, 12].map((h, i) => <span key={i} className="w-1 animate-pulse rounded bg-encre-900" style={{ height: h, animationDelay: `${i * 90}ms` }} />)}</div>}
           <button onClick={dictee.ecoute ? dictee.arreter : dictee.demarrer} aria-pressed={dictee.ecoute} aria-label={dictee.ecoute ? 'Arrêter la dictée' : 'Dicter'}
             className={`mx-auto grid h-[88px] w-[88px] place-items-center rounded-[30px] transition active:scale-95 ${dictee.ecoute ? 'bg-alerte shadow-[0_0_0_10px_rgba(194,65,45,.12)]' : 'bg-encre-900 text-flash-500'}`}>
@@ -123,16 +157,16 @@ export default function EditeurDevis() {
           </button>
           <p className="mt-3 text-[13px] text-gris">{dictee.ecoute ? 'Touchez pour arrêter. Vos prix habituels sont repris tout seuls.' : description ? 'Touchez pour compléter.' : 'Touchez pour parler.'}</p>
         </>}
-        {description.trim().length >= 5 && !dictee.ecoute && (
-          <button onClick={rediger} disabled={chargement} className="btn-primaire mt-4 w-full rounded-2xl py-4 text-base font-extrabold">{chargement ? 'Rédaction du devis…' : 'Rédiger le devis'}</button>
+        {mode !== 'importer' && description.trim().length >= 5 && !dictee.ecoute && (
+          <button onClick={rediger} disabled={chargement} className="btn-primaire btn-grand mt-4 w-full">{chargement ? 'Rédaction du devis…' : 'Rédiger le devis'}</button>
         )}
-        <button onClick={() => { dictee.arreter(); setLignes(ls => (ls.length ? ls : [ligneVide(tvaDefaut)])); setEtape(2); }} className="mt-2 py-2 text-[13px] font-semibold text-gris">Remplir les lignes moi-même</button>
+        <button onClick={() => { dictee.arreter(); setLignes(ls => (ls.length ? ls : [ligneVide(tvaDefaut)])); setEtape(2); }} className="mt-2 min-h-11 text-sm font-semibold text-gris">Remplir les lignes moi-même</button>
       </div>
 
       <Feuille ouverte={choixClient} fermer={() => setChoixClient(false)}>
         <p className="mb-3 text-lg font-extrabold">Pour qui ?</p>
         <input autoFocus className="champ" placeholder="Nom d’un nouveau client" value={client.nom} onChange={e => setClient({ ...client, nom: e.target.value })} onKeyDown={e => e.key === 'Enter' && setChoixClient(false)} />
-        <input className="champ mt-2" placeholder="Adresse du chantier (facultatif)" value={client.adresse} onChange={e => setClient({ ...client, adresse: e.target.value })} />
+        <div className="mt-2"><ChampAdresse valeur={client.adresse} changer={adresse => setClient({ ...client, adresse })} placeholder="Adresse du chantier (facultatif)" /></div>
         <button onClick={() => setChoixClient(false)} className="btn-primaire mt-3 w-full">Valider</button>
         {connus.length > 0 && <>
           <p className="lab mb-1 mt-5">Clients récents</p>
@@ -165,8 +199,9 @@ export default function EditeurDevis() {
           <span className="text-xs font-semibold text-gris group-open:hidden">modifier</span>
         </summary>
         <div className="grid gap-2 border-t border-[#f0ece4] p-3.5">
-          <input className="champ" placeholder="Nom" value={client.nom} onChange={e => setClient({ ...client, nom: e.target.value })} />
-          <input className="champ" placeholder="Adresse du chantier" value={client.adresse} onChange={e => setClient({ ...client, adresse: e.target.value })} />
+          <input className="champ" placeholder="Nom" list="clients-connus" value={client.nom} onChange={e => { const nom = e.target.value, c = connus.find(x => x.nom === nom); setClient(c ? { nom: c.nom, adresse: c.adresse, email: c.email, telephone: c.telephone } : { ...client, nom }); }} />
+          <datalist id="clients-connus">{connus.map(c => <option key={c.cle} value={c.nom} />)}</datalist>
+          <ChampAdresse valeur={client.adresse} changer={adresse => setClient({ ...client, adresse })} placeholder="Adresse du chantier" />
           <div className="grid grid-cols-2 gap-2"><input className="champ" inputMode="tel" placeholder="Téléphone" value={client.telephone} onChange={e => setClient({ ...client, telephone: e.target.value })} /><input className="champ" type="email" placeholder="E-mail" value={client.email} onChange={e => setClient({ ...client, email: e.target.value })} /></div>
         </div>
       </details>
@@ -182,7 +217,7 @@ export default function EditeurDevis() {
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-sm">
             <input aria-label="Quantité" inputMode="decimal" className="w-14 rounded-lg bg-papier px-2 py-1.5 text-center font-semibold outline-none" value={l.quantite} onChange={e => maj(i, { quantite: nombre(e.target.value) })} />
-            <input aria-label="Unité" className="w-12 rounded-lg bg-papier px-2 py-1.5 text-center outline-none" value={l.unite} onChange={e => maj(i, { unite: e.target.value })} />
+            <select aria-label="Unité" className="min-h-10 rounded-lg bg-papier px-1.5 text-center outline-none" value={l.unite} onChange={e => maj(i, { unite: e.target.value })}>{[...new Set([...UNITES, l.unite])].map(u => <option key={u} value={u}>{u}</option>)}</select>
             <span className="text-gris">×</span>
             <span className="inline-flex items-center rounded-lg bg-papier pr-2"><input aria-label="Prix unitaire HT" inputMode="decimal" className={`w-[4.5rem] bg-transparent px-2 py-1.5 text-right font-semibold outline-none ${l.estimation ? 'text-flash-700' : ''}`} value={l.prixUnitaireHt} onChange={e => maj(i, { prixUnitaireHt: nombre(e.target.value) })} />€</span>
             {entreprise.regimeTva === 'normal' && <select aria-label="TVA" className="rounded-lg bg-papier px-1.5 py-1.5 text-[13px] outline-none" value={l.tauxTva} onChange={e => maj(i, { tauxTva: Number(e.target.value) })}>{TAUX.map(x => <option key={x} value={x}>TVA {String(x).replace('.', ',')} %</option>)}</select>}
@@ -200,7 +235,7 @@ export default function EditeurDevis() {
           {erreur && <p role="alert" className="mb-2 rounded-xl bg-alerte-pale px-3 py-2 text-sm text-alerte">{erreur}</p>}
           <div className="flex items-center gap-3">
             <div className="shrink-0"><p className="text-xs text-gris">{entreprise.regimeTva === 'normal' ? 'Total TTC' : 'Total'}</p><p className="text-lg font-extrabold">{euros(t.ttc)}</p></div>
-            <button onClick={enregistrer} disabled={envoi || !lignes.some(l => l.designation.trim())} className="btn-primaire flex-1 rounded-2xl py-4 text-base font-extrabold">{envoi ? 'Enregistrement…' : existant ? 'Enregistrer' : 'Valider le devis'}</button>
+            <button onClick={enregistrer} disabled={envoi || !lignes.some(l => l.designation.trim())} className="btn-primaire btn-grand flex-1">{envoi ? 'Enregistrement…' : existant ? 'Enregistrer' : 'Valider le devis'}</button>
           </div>
         </div>
       </div>

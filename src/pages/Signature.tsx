@@ -47,8 +47,8 @@ export default function Signature() {
     return () => { c.removeEventListener('pointerdown', bas); c.removeEventListener('pointermove', bouge); c.removeEventListener('pointerup', haut); };
   }, [pret]);
 
-  if (vue === 'chargement') return <p className="mt-20 text-center text-slate-500">Chargement…</p>;
-  if (!vue) return <div className="mx-auto max-w-lg p-6"><Logo /><p className="carte mt-6">Ce devis est introuvable ou n’est plus disponible.</p></div>;
+  if (vue === 'chargement') return <div className="grid min-h-screen place-items-center bg-papier"><span className="h-8 w-8 animate-spin rounded-full border-[3px] border-trait border-t-encre-900" aria-label="Chargement" /></div>;
+  if (!vue) return <div className="min-h-screen bg-papier"><div className="mx-auto max-w-lg px-5 pt-6"><Logo /><p className="carte mt-8">Ce devis est introuvable ou n’est plus disponible.</p></div></div>;
   const t = totaux(vue.lignes, vue.regime);
   const effacer = () => { const c = toile.current!; c.getContext('2d')!.clearRect(0, 0, c.width, c.height); setTrace(false); };
 
@@ -72,26 +72,31 @@ export default function Signature() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5 p-4">
-      <Logo />
-      <section className="carte">
-        <p className="text-sm text-slate-500">Devis {vue.numero} · {vue.entreprise}</p>
-        <h1 className="text-2xl font-extrabold">{vue.titre}</h1>
-        <ul className="mt-4 divide-y divide-slate-100 text-sm">{vue.lignes.map(l => <li key={l.id} className="flex justify-between gap-3 py-2"><span>{l.designation} <span className="text-slate-500">({l.quantite} {l.unite})</span></span><span className="font-medium">{euros(totalLigne(l))}</span></li>)}</ul>
-        <p className="mt-3 text-right text-lg font-extrabold">{vue.regime === 'franchise' ? 'Total' : 'Total TTC'} : {euros(t.ttc)}</p>
-      </section>
-      {vue.signature ? (
-        <p className="carte bg-green-50 text-green-800">Devis signé par {vue.signature.nom} le {new Date(vue.signature.date).toLocaleDateString('fr-FR')}. Merci !</p>
-      ) : (
-        <section className="carte space-y-3">
-          <h2 className="text-lg font-bold">Bon pour accord</h2>
-          <label><span className="etiquette">Votre nom</span><input className="champ" value={nom} onChange={e => setNom(e.target.value)} maxLength={120} /></label>
-          <div><span className="etiquette">Votre signature</span><canvas ref={toile} width={600} height={200} className="h-40 w-full touch-none rounded-xl border border-dashed border-slate-400 bg-white" aria-label="Zone de signature" /></div>
-          <div className="flex gap-2"><button className="btn-secondaire" onClick={effacer}>Effacer</button><button className="btn-primaire" disabled={envoi || nom.trim().length < 2 || !trace} onClick={signer}>{envoi ? 'Envoi…' : 'Signer le devis'}</button></div>
-          {erreur && <p role="alert" className="text-sm text-red-700">{erreur}</p>}
-          <p className="text-xs text-slate-500">En signant, vous acceptez le devis et ses conditions.</p>
+    <div className="min-h-screen bg-papier pb-10">
+      <div className="mx-auto max-w-lg space-y-4 px-5 pt-6">
+        <p className="text-[13px] font-semibold text-gris">{vue.entreprise} · devis {vue.numero}</p>
+        <h1 className="titre-page leading-tight">{vue.titre}</h1>
+        <section className="rounded-[18px] border border-trait bg-white px-4 py-1">
+          {vue.lignes.map(l => <div key={l.id} className="flex justify-between gap-3 border-b border-[#f0ece4] py-2.5 text-sm"><span>{l.designation}<span className="block text-xs text-gris">{String(l.quantite).replace('.', ',')} {l.unite}</span></span><b className="shrink-0">{euros(totalLigne(l))}</b></div>)}
+          <div className="flex justify-between py-3 text-lg font-extrabold"><span>{vue.regime === 'franchise' ? 'Total' : 'Total TTC'}</span><span>{euros(t.ttc)}</span></div>
         </section>
-      )}
+        {vue.signature ? (
+          <p className="rounded-2xl bg-ok-pale px-4 py-4 font-semibold text-ok">Devis signé par {vue.signature.nom} le {new Date(vue.signature.date).toLocaleDateString('fr-FR')}. Merci.</p>
+        ) : (
+          <section className="space-y-3 rounded-[18px] border border-trait bg-white p-4">
+            <h2 className="text-lg font-extrabold">Bon pour accord</h2>
+            <input className="champ" placeholder="Votre nom" aria-label="Votre nom" autoComplete="name" value={nom} onChange={e => setNom(e.target.value)} maxLength={120} />
+            <div>
+              <div className="mb-1 flex items-center justify-between"><span className="etiquette !mb-0">Votre signature</span>{trace && <button onClick={effacer} className="min-h-11 px-1 text-sm font-semibold text-gris">Effacer</button>}</div>
+              <canvas ref={toile} width={600} height={220} className="h-44 w-full touch-none rounded-xl border-2 border-dashed border-gris/40 bg-papier" aria-label="Zone de signature : signez avec le doigt" />
+            </div>
+            <button className="btn-primaire btn-grand w-full" disabled={envoi || nom.trim().length < 2 || !trace} onClick={signer}>{envoi ? 'Envoi…' : 'Signer le devis'}</button>
+            {erreur && <p role="alert" className="text-sm text-alerte">{erreur}</p>}
+            <p className="text-xs text-gris">En signant, vous acceptez ce devis et ses conditions.</p>
+          </section>
+        )}
+        <p className="pt-2 text-center"><Logo /></p>
+      </div>
     </div>
   );
 }

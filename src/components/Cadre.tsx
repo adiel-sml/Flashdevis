@@ -62,7 +62,7 @@ export default function Cadre() {
   let plusTard = false; try { plusTard = !!localStorage.getItem(CLE_PLUS_TARD); } catch { /* stockage indisponible */ }
   if (!entreprise.nom && !plusTard && pathname !== '/app/bienvenue') return <Navigate to="/app/bienvenue" replace />;
   // Création et fiche d'un devis, premier lancement : plein écran, avec leurs propres actions en bas
-  const pleinEcran = /^\/app\/(nouveau|bienvenue|devis\/[^/]+)/.test(pathname);
+  const pleinEcran = /^\/app\/(nouveau|bienvenue|devis\/[^/]+|profil\/[^/]+)/.test(pathname);
   return (
     <div className="min-h-screen">
       <main className={`mx-auto max-w-lg px-5 pt-[max(1rem,env(safe-area-inset-top))] ${pleinEcran ? 'pb-36' : 'pb-32'}`}><Outlet /></main>

@@ -79,7 +79,7 @@ export default function Legal() {
   const { pathname } = useLocation();
   const page = pathname === '/mentions-legales' ? <Mentions /> : pathname === '/confidentialite' ? <Confidentialite /> : <Conditions />;
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-papier">
       <header className="mx-auto max-w-2xl px-5 py-4"><Link to="/"><Logo /></Link></header>
       <main className="mx-auto max-w-2xl px-5 pb-16 text-[15px] leading-relaxed text-encre-800">{page}</main>
       <PiedLegal />
@@ -88,7 +88,7 @@ export default function Legal() {
 }
 
 export const PiedLegal = () => (
-  <footer className="mx-auto flex max-w-5xl flex-wrap gap-x-4 gap-y-1 px-5 py-8 text-sm text-slate-500">
+  <footer className="mx-auto flex max-w-5xl flex-wrap gap-x-4 gap-y-1 px-5 py-8 text-sm text-gris">
     <span>© {new Date().getFullYear()} FlashDevis</span>
     <Link to="/mentions-legales" className="hover:underline">Mentions légales</Link>
     <Link to="/conditions" className="hover:underline">Conditions générales</Link>

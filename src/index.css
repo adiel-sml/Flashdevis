@@ -3,12 +3,18 @@
 @tailwind utilities;
 
 @layer components {
-  .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-semibold transition active:scale-[.98] disabled:opacity-50 disabled:cursor-not-allowed; }
-  .btn-primaire { @apply btn bg-flash-500 font-bold text-encre-900 hover:bg-flash-400; }
-  .btn-secondaire { @apply btn border border-trait bg-white text-encre-800 hover:bg-papier; }
-  .btn-petit { @apply inline-flex shrink-0 items-center rounded-[10px] border border-trait bg-papier px-3 py-1.5 text-[13px] font-bold text-encre-900 active:scale-[.97]; }
+  /* Boutons : trois hauteurs seulement (44, 48, 56 px), mêmes coins, même graisse */
+  .btn { @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-[15px] font-bold transition active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-primaire { @apply btn bg-flash-500 text-encre-900 hover:bg-flash-400; }
+  .btn-secondaire { @apply btn border border-trait bg-white text-encre-900 hover:bg-papier; }
+  .btn-sombre { @apply btn bg-encre-900 text-white hover:bg-encre-800; }
+  .btn-grand { @apply min-h-14 rounded-2xl text-base; }
+  .btn-petit { @apply inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-trait bg-white px-4 text-sm font-bold text-encre-900 active:scale-[.97]; }
+  .puce { @apply inline-flex min-h-11 items-center rounded-full border border-trait bg-white px-4 text-sm font-semibold; }
+  .puce-on { @apply border-encre-900 bg-encre-900 text-white; }
   .carte { @apply rounded-2xl border border-trait bg-white p-4; }
-  .champ { @apply w-full rounded-xl border border-trait bg-white px-3 py-2.5 text-encre-900 outline-none placeholder:text-gris/70 focus:border-encre-900 focus:ring-2 focus:ring-flash-100; }
+  .champ { @apply min-h-12 w-full rounded-xl border border-trait bg-white px-3.5 text-[15px] text-encre-900 outline-none placeholder:text-gris/70 focus:border-encre-900 focus:ring-2 focus:ring-flash-100; }
+  textarea.champ { @apply py-3; }
   .etiquette { @apply mb-1 block text-[13px] font-semibold text-encre-600; }
   .lab { @apply text-xs font-semibold uppercase tracking-[.06em] text-gris; }
   .titre-page { @apply text-[26px] font-extrabold tracking-tight; }

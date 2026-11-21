@@ -61,3 +61,13 @@ describe('acompte dans le suivi', () => {
     expect(enJeu([d], 'franchise').impaye).toBe(70);
   });
 });
+
+describe('tableau de bord', () => {
+  it('encaissé par mois : acompte et solde à leur date de paiement', async () => {
+    const { encaisseParMois, parcours } = await import('./suivi');
+    const d = devis({ statut: 'facture', acompte: { numero: 'F-1', date: il(40), pct: 30, payee: true, payeeLe: '2026-10-10T10:00:00Z' }, facture: { numero: 'F-2', date: il(5), payee: true }, payeeLe: '2026-11-15T10:00:00Z' });
+    const m = encaisseParMois([d], 'franchise', 2, new Date(MAINTENANT));
+    expect(m).toEqual([{ mois: '2026-10', total: 30 }, { mois: '2026-11', total: 70 }]);
+    expect(parcours([d, devis({}), devis({ statut: 'envoye' })])).toEqual({ envoyes: 2, signes: 1, factures: 1, payes: 1 });
+  });
+});

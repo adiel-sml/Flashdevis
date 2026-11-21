@@ -132,3 +132,27 @@ export function conformite(e: { nom: string; siret: string; adresse: string; ass
   ];
   return { faits: points.filter(p => p.ok).length, total: points.length, premier: points.find(p => !p.ok) };
 }
+
+// Argent réellement encaissé par mois (acomptes et factures payés, à leur date de paiement) sur les n derniers mois
+export function encaisseParMois(devis: Devis[], regime: RegimeTva, n = 6, maintenant = new Date()) {
+  const mois = Array.from({ length: n }, (_, i) => { const x = new Date(maintenant.getFullYear(), maintenant.getMonth() - (n - 1 - i), 1); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`; });
+  const somme = Object.fromEntries(mois.map(m => [m, 0]));
+  const ajouter = (iso: string | null | undefined, v: number) => { const m = iso?.slice(0, 7); if (m && m in somme) somme[m] += v; };
+  for (const d of devis) {
+    const a = ttcAcompte(d, regime);
+    if (d.acompte?.payee) ajouter(d.acompte.payeeLe ?? d.acompte.date, a);
+    if (d.facture?.payee) ajouter(d.payeeLe ?? d.facture.date, ttc(d, regime) - (d.acompte ? a : 0));
+  }
+  return mois.map(m => ({ mois: m, total: Math.round(somme[m] * 100) / 100 }));
+}
+
+// Parcours des devis : combien en sont arrivés à chaque étape
+export function parcours(devis: Devis[]) {
+  const e = devis.map(etape);
+  return {
+    envoyes: e.filter(x => x !== 'brouillon').length,
+    signes: e.filter(x => x === 'signe' || x === 'facture' || x === 'payee').length,
+    factures: e.filter(x => x === 'facture' || x === 'payee').length,
+    payes: e.filter(x => x === 'payee').length,
+  };
+}

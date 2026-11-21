@@ -139,8 +139,9 @@ export default function DetailDevis() {
 
       <div className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-papier from-75% to-transparent px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5">
         <div className="mx-auto flex max-w-lg gap-2">
-          <button onClick={principal[1]} disabled={occupe} className="btn-primaire flex-1 rounded-2xl py-4 text-base font-extrabold">{occupe ? 'Un instant…' : principal[0]}</button>
-          <button onClick={() => setMenu(true)} aria-label="Autres actions" className="grid w-14 place-items-center rounded-2xl border border-trait bg-white"><IcSuite className="h-[22px] w-[22px]" /></button>
+          <button onClick={principal[1]} disabled={occupe} className="btn-primaire btn-grand flex-1">{occupe ? 'Un instant…' : principal[0]}</button>
+          <button onClick={pdf(d.facture ? 'facture' : 'devis')} aria-label={d.facture ? 'Télécharger la facture en PDF' : 'Télécharger le devis en PDF'} className="flex min-h-14 w-16 flex-col items-center justify-center rounded-2xl border border-trait bg-white text-[11px] font-bold"><IcPdf className="h-5 w-5" />PDF</button>
+          <button onClick={() => setMenu(true)} aria-label="Autres actions" className="grid min-h-14 w-14 place-items-center rounded-2xl border border-trait bg-white"><IcSuite className="h-[22px] w-[22px]" /></button>
         </div>
       </div>
       <Feuille ouverte={menu} fermer={() => setMenu(false)}>

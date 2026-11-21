@@ -4,6 +4,8 @@ import { Avatar, EnTete, Feuille } from '../components/Elements';
 import { IcBatiment, IcBouclier, IcCarte, IcChevron, IcCorbeille, IcListe, IcPlus, IcRetour } from '../components/Icones';
 import { allerVersStripe, attendrePro } from '../lib/abonnement';
 import { reduireLogo, telecharger } from '../lib/image';
+import { ChampAdresse, RechercheEntreprise } from '../components/Saisie';
+import { METIERS } from './Bienvenue';
 import { csv, lignesComptables } from '../lib/export';
 import { euros } from '../lib/calcul';
 import { supprimerCompte } from '../lib/compte';
@@ -83,6 +85,19 @@ export default function Profil() {
 // ----- Rubriques du profil : un formulaire court par sujet -----
 const Champ = ({ lib, children, aide }: { lib: string; children: ReactNode; aide?: string }) => <label className="block"><span className="etiquette">{lib}</span>{children}{aide && <span className="mt-1 block text-xs text-gris">{aide}</span>}</label>;
 
+const CONDITIONS = ['Paiement à réception de facture, par virement.', 'Paiement à 30 jours, par virement.', 'Paiement à la fin des travaux, par virement ou chèque.'];
+// Choix rapide parmi des valeurs courantes, sans saisie (une valeur personnalisée reste possible)
+function Choix({ lib, options, valeur, suffixe, changer }: { lib: string; options: number[]; valeur: number; suffixe: string; changer: (v: number) => void }) {
+  return (
+    <div><span className="etiquette">{lib}</span>
+      <div className="flex flex-wrap gap-2">
+        {options.map(o => <button key={o} type="button" onClick={() => changer(o)} className={`puce ${valeur === o ? 'puce-on' : ''}`}>{o === 0 ? 'Aucun' : `${o}${suffixe}`}</button>)}
+        {!options.includes(valeur) && <span className="puce puce-on">{valeur}{suffixe}</span>}
+      </div>
+    </div>
+  );
+}
+
 function FormEntreprise({ section }: { section: 'entreprise' | 'tva' | 'paiement' }) {
   const etat = useEtat();
   const nav = useNavigate();
@@ -90,34 +105,36 @@ function FormEntreprise({ section }: { section: 'entreprise' | 'tva' | 'paiement
   const [erreur, setErreur] = useState('');
   const [envoi, setEnvoi] = useState(false);
   const txt = (k: keyof Entreprise, props: Record<string, unknown> = {}) => <input className="champ" value={String(e[k])} onChange={ev => setE({ ...e, [k]: ev.target.value })} {...props} />;
-  const num = (k: 'validiteJours' | 'acomptePct') => <input className="champ" inputMode="numeric" value={e[k]} onChange={ev => setE({ ...e, [k]: Number(ev.target.value.replace(/\D/g, '')) || 0 })} />;
   async function enregistrer() {
     setEnvoi(true); setErreur('');
     try { await enregistrerEntreprise(e); nav('/app/profil'); } catch { setErreur('Enregistrement impossible. Vérifiez votre connexion et réessayez.'); } finally { setEnvoi(false); }
   }
   const titres = { entreprise: 'Entreprise', tva: 'TVA et assurance', paiement: 'Paiement et acompte' };
   return (
-    <Rubrique titre={titres[section]} pied={<><button onClick={enregistrer} disabled={envoi} className="btn-primaire w-full py-3.5 text-base">{envoi ? 'Enregistrement…' : 'Enregistrer'}</button>{erreur && <p role="alert" className="mt-2 text-sm text-alerte">{erreur}</p>}</>}>
+    <Rubrique titre={titres[section]} pied={<><button onClick={enregistrer} disabled={envoi} className="btn-primaire btn-grand w-full">{envoi ? 'Enregistrement…' : 'Enregistrer'}</button>{erreur && <p role="alert" className="mt-2 text-sm text-alerte">{erreur}</p>}</>}>
       {section === 'entreprise' && <>
+        <RechercheEntreprise choisir={x => setE({ ...e, nom: x.nom, siret: x.siret || e.siret, adresse: x.adresse || e.adresse, metier: e.metier || x.metier })} />
         <ChoixLogo logo={e.logo} changer={logo => setE({ ...e, logo })} />
-        <Champ lib="Nom ou raison sociale">{txt('nom')}</Champ>
-        <Champ lib="Métier">{txt('metier', { placeholder: 'Plombier chauffagiste' })}</Champ>
-        <Champ lib="SIRET" aide="14 chiffres, obligatoire sur vos devis.">{txt('siret', { inputMode: 'numeric' })}</Champ>
-        <Champ lib="Adresse">{txt('adresse')}</Champ>
-        <Champ lib="Téléphone">{txt('telephone', { inputMode: 'tel' })}</Champ>
-        <Champ lib="E-mail">{txt('email', { type: 'email' })}</Champ>
+        <Champ lib="Nom">{txt('nom')}</Champ>
+        <Champ lib="Métier"><input className="champ" list="metiers" value={e.metier} onChange={ev => setE({ ...e, metier: ev.target.value })} /><datalist id="metiers">{METIERS.map(m => <option key={m} value={m} />)}</datalist></Champ>
+        <Champ lib="SIRET">{txt('siret', { inputMode: 'numeric', placeholder: '14 chiffres' })}</Champ>
+        <Champ lib="Adresse"><ChampAdresse valeur={e.adresse} changer={adresse => setE({ ...e, adresse })} /></Champ>
+        <div className="grid grid-cols-2 gap-3"><Champ lib="Téléphone">{txt('telephone', { inputMode: 'tel', autoComplete: 'tel' })}</Champ><Champ lib="E-mail">{txt('email', { type: 'email', autoComplete: 'email' })}</Champ></div>
       </>}
       {section === 'tva' && <>
         <div className="grid grid-cols-2 gap-2">{([['normal', 'Assujetti à la TVA'], ['franchise', 'Franchise (micro)']] as const).map(([v, lib]) => (
           <button key={v} onClick={() => setE({ ...e, regimeTva: v })} className={`rounded-xl border px-3 py-3 text-sm font-semibold ${e.regimeTva === v ? 'border-encre-900 bg-encre-900 text-white' : 'border-trait bg-white'}`}>{lib}</button>
         ))}</div>
         {e.regimeTva === 'normal' ? <Champ lib="N° de TVA intracommunautaire">{txt('numeroTva', { placeholder: 'FR12 345678901' })}</Champ> : <p className="text-[13px] text-gris">La mention « TVA non applicable, art. 293 B du CGI » est ajoutée à vos documents.</p>}
-        <Champ lib="Assurance décennale ou RC pro" aide="Obligatoire sur les devis du bâtiment : assureur, n° de contrat, zone couverte.">{txt('assurance')}</Champ>
+        <Champ lib="Assurance décennale ou RC pro">{txt('assurance', { placeholder: 'Assureur et n° de contrat' })}</Champ>
       </>}
       {section === 'paiement' && <>
-        <Champ lib="Acompte demandé (%)">{num('acomptePct')}</Champ>
-        <Champ lib="Validité des devis (jours)">{num('validiteJours')}</Champ>
-        <Champ lib="Conditions de paiement"><textarea className="champ min-h-24" value={e.conditionsPaiement} onChange={ev => setE({ ...e, conditionsPaiement: ev.target.value })} /></Champ>
+        <Choix lib="Acompte à la signature" options={[0, 30, 40, 50]} valeur={e.acomptePct} suffixe=" %" changer={v => setE({ ...e, acomptePct: v })} />
+        <Choix lib="Durée de validité des devis" options={[15, 30, 60, 90]} valeur={e.validiteJours} suffixe=" jours" changer={v => setE({ ...e, validiteJours: v })} />
+        <div><span className="etiquette">Conditions de paiement</span>
+          <div className="mb-2 flex flex-wrap gap-2">{CONDITIONS.map(c => <button key={c} type="button" onClick={() => setE({ ...e, conditionsPaiement: c })} className={`puce ${e.conditionsPaiement === c ? 'puce-on' : ''}`}>{((x: string) => x[0].toUpperCase() + x.slice(1))(c.replace(/\.$/, '').replace(/^Paiement /, '').replace(/, par virement.*$/, ''))}</button>)}</div>
+          <textarea className="champ min-h-20" value={e.conditionsPaiement} onChange={ev => setE({ ...e, conditionsPaiement: ev.target.value })} />
+        </div>
       </>}
     </Rubrique>
   );
@@ -134,7 +151,7 @@ function FormTarifs() {
     try { await enregistrerTarifs(tarifs.filter(t => t.designation.trim())); nav('/app/profil'); } catch { setErreur('Enregistrement impossible : deux tarifs ne peuvent pas avoir le même nom.'); }
   }
   return (
-    <Rubrique titre="Mes tarifs" pied={<><button onClick={enregistrer} className="btn-primaire w-full py-3.5 text-base">Enregistrer</button>{erreur && <p role="alert" className="mt-2 text-sm text-alerte">{erreur}</p>}</>}>
+    <Rubrique titre="Mes tarifs" pied={<><button onClick={enregistrer} className="btn-primaire btn-grand w-full">Enregistrer</button>{erreur && <p role="alert" className="mt-2 text-sm text-alerte">{erreur}</p>}</>}>
       <p className="text-[13px] text-gris">Repris dans vos devis. La liste s’enrichit seule quand vous confirmez un prix.</p>
       <ul className="overflow-hidden rounded-[18px] border border-trait bg-white">
         {tarifs.length === 0 && <li className="px-4 py-6 text-center text-sm text-gris">Aucun tarif pour l’instant.</li>}
@@ -181,7 +198,7 @@ function ExportComptable() {
   const NOMS = Array.from({ length: 12 }, (_, i) => new Date(2026, i, 1).toLocaleDateString('fr-FR', { month: 'short' }));
   const nom = `factures-${annee}${mois ? `-${String(mois).padStart(2, '0')}` : ''}.csv`;
   return (
-    <Rubrique titre="Export comptable" pied={<button onClick={() => telecharger(nom, csv(lignes), 'text/csv;charset=utf-8')} disabled={!lignes.length} className="btn-primaire w-full py-3.5 text-base">Télécharger le fichier ({lignes.length} facture{lignes.length > 1 ? 's' : ''})</button>}>
+    <Rubrique titre="Export comptable" pied={<button onClick={() => telecharger(nom, csv(lignes), 'text/csv;charset=utf-8')} disabled={!lignes.length} className="btn-primaire btn-grand w-full">Télécharger le fichier ({lignes.length} facture{lignes.length > 1 ? 's' : ''})</button>}>
       <p className="text-[13px] text-gris">Un fichier à envoyer à votre comptable : chaque facture et facture d’acompte, avec les montants HT, TVA et TTC et le paiement. Il s’ouvre dans Excel.</p>
       <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]">{annees.map(a => <button key={a} onClick={() => setAnnee(a)} className={`shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-semibold ${a === annee ? 'border-encre-900 bg-encre-900 text-white' : 'border-trait bg-white'}`}>{a}</button>)}</div>
       <div className="grid grid-cols-4 gap-1.5">
